@@ -277,6 +277,8 @@ class App(tk.Tk):
         self.infer_device_var = tk.StringVar(value='0')
         self.view_w_var = tk.StringVar(value='1280')
         self.view_h_var = tk.StringVar(value='720')
+        self.save_video_var = tk.BooleanVar(value=False)
+        self.save_path_var = tk.StringVar(value='')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -300,7 +302,11 @@ class App(tk.Tk):
         ttk.Label(frm, text='View height (max)').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.view_h_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=7, column=0, pady=8)
+        ttk.Checkbutton(frm, text='Save overlay video', variable=self.save_video_var).grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.save_path_var, width=70).grid(row=7, column=1, sticky='we')
+        ttk.Button(frm, text='Save As', command=self.pick_save_video).grid(row=7, column=2)
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=8, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -317,6 +323,12 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select model/weights for training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
             self.model_var.set(p)
+
+    def pick_save_video(self):
+        p = filedialog.asksaveasfilename(title='Save overlay video as', defaultextension='.mp4', filetypes=[('MP4 video', '*.mp4'), ('All files', '*.*')])
+        if p:
+            self.save_path_var.set(p)
+            self.save_video_var.set(True)
 
     def pick_bg_dir(self):
         p = filedialog.askdirectory(title='Select background images folder')
@@ -457,6 +469,10 @@ class App(tk.Tk):
             '--view-width', self.view_w_var.get(),
             '--view-height', self.view_h_var.get(),
         ]
+        if self.save_video_var.get():
+            cmd.append('--save-video')
+            if self.save_path_var.get().strip():
+                cmd.extend(['--save-path', self.save_path_var.get().strip()])
         self.run_cmd(cmd)
 
 

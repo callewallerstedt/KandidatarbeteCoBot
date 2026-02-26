@@ -6,7 +6,7 @@ This folder provides a practical pipeline for your object segmentation project:
 2. Auto-detect video length and sample N frames evenly + auto masks (pseudo labels)
 3. Build YOLO-seg dataset structure
 4. Train YOLO-seg model
-5. Run inference on webcam or video with mask overlays
+5. Run inference on webcam or video with mask overlays (optional video save)
 
 ## Quick start (Windows student PC)
 
