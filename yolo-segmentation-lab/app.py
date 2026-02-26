@@ -45,7 +45,15 @@ class App(tk.Tk):
         self.log_line('> ' + ' '.join(map(str, cmd)))
 
         def _target():
-            p = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            p = subprocess.Popen(
+                cmd,
+                cwd=str(cwd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+            )
             for line in p.stdout:
                 self.log_line(line.rstrip())
             rc = p.wait()
