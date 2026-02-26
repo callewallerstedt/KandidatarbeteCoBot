@@ -139,6 +139,8 @@ class App(tk.Tk):
         self.infer_imgsz_var = tk.StringVar(value='640')
         self.infer_conf_var = tk.StringVar(value='0.25')
         self.infer_device_var = tk.StringVar(value='0')
+        self.view_w_var = tk.StringVar(value='1280')
+        self.view_h_var = tk.StringVar(value='720')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -156,7 +158,13 @@ class App(tk.Tk):
         ttk.Label(frm, text='Device').grid(row=4, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.infer_device_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=5, column=0, pady=8)
+        ttk.Label(frm, text='View width (max)').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.view_w_var).grid(row=5, column=1, sticky='we')
+
+        ttk.Label(frm, text='View height (max)').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.view_h_var).grid(row=6, column=1, sticky='we')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=7, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -211,6 +219,8 @@ class App(tk.Tk):
             '--imgsz', self.infer_imgsz_var.get(),
             '--conf', self.infer_conf_var.get(),
             '--device', self.infer_device_var.get(),
+            '--view-width', self.view_w_var.get(),
+            '--view-height', self.view_h_var.get(),
         ]
         self.run_cmd(cmd)
 
