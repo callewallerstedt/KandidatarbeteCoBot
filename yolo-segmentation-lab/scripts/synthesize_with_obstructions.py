@@ -47,19 +47,17 @@ def poly_to_mask(poly: np.ndarray, w: int, h: int):
     return m
 
 
-def rotate_bound_pair(img, mask, angle):
-    h, w = img.shape[:2]
-    cx, cy = w / 2.0, h / 2.0
-    M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
-    cos = abs(M[0, 0])
-    sin = abs(M[0, 1])
-    nw = int((h * sin) + (w * cos))
-    nh = int((h * cos) + (w * sin))
-    M[0, 2] += (nw / 2.0) - cx
-    M[1, 2] += (nh / 2.0) - cy
-    rot_img = cv2.warpAffine(img, M, (nw, nh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-    rot_mask = cv2.warpAffine(mask, M, (nw, nh), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-    return rot_img, rot_mask
+def pick_random_background(bg_files, out_w, out_h):
+    bg = cv2.imread(str(random.choice(bg_files)))
+    if bg is None:
+        return np.full((out_h, out_w, 3), 127, dtype=np.uint8)
+    bh, bw = bg.shape[:2]
+    scale = max(out_w / max(bw, 1), out_h / max(bh, 1))
+    nw, nh = int(bw * scale), int(bh * scale)
+    bg = cv2.resize(bg, (nw, nh), interpolation=cv2.INTER_AREA)
+    x0 = random.randint(0, max(nw - out_w, 0))
+    y0 = random.randint(0, max(nh - out_h, 0))
+    return bg[y0:y0 + out_h, x0:x0 + out_w].copy()
 
 
 def load_obstruction(path: Path):
@@ -75,6 +73,7 @@ def load_obstruction(path: Path):
     else:
         gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         _, m = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY_INV)
+
     ys, xs = np.where(m > 0)
     if len(xs) < 20:
         return None, None
@@ -82,30 +81,30 @@ def load_obstruction(path: Path):
     return im[y1:y2 + 1, x1:x2 + 1], m[y1:y2 + 1, x1:x2 + 1]
 
 
-def top_point(mask):
-    ys, xs = np.where(mask > 0)
-    if len(xs) == 0:
-        return None
-    iy = ys.argmin()
-    return np.array([float(xs[iy]), float(ys[iy])], dtype=np.float32)
-
-
-def top_bottom_mid_from_image_shape(img):
+def rotate_bound_with_points(img, mask, angle_deg, points_xy):
     h, w = img.shape[:2]
-    top_mid = np.array([w / 2.0, 0.0], dtype=np.float32)
-    bottom_mid = np.array([w / 2.0, h - 1.0], dtype=np.float32)
-    return top_mid, bottom_mid
+    cx, cy = w / 2.0, h / 2.0
 
+    M = cv2.getRotationMatrix2D((cx, cy), angle_deg, 1.0)
+    cos = abs(M[0, 0])
+    sin = abs(M[0, 1])
+    nw = int((h * sin) + (w * cos))
+    nh = int((h * cos) + (w * sin))
 
-def centroid(mask):
-    ys, xs = np.where(mask > 0)
-    if len(xs) == 0:
-        return None
-    return np.array([xs.mean(), ys.mean()], dtype=np.float32)
+    M[0, 2] += (nw / 2.0) - cx
+    M[1, 2] += (nh / 2.0) - cy
+
+    rot_img = cv2.warpAffine(img, M, (nw, nh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    rot_mask = cv2.warpAffine(mask, M, (nw, nh), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+    pts = np.array(points_xy, dtype=np.float32)
+    pts_h = np.hstack([pts, np.ones((pts.shape[0], 1), dtype=np.float32)])
+    t = (M @ pts_h.T).T
+    return rot_img, rot_mask, t
 
 
 def angle_deg(v):
-    return np.degrees(np.arctan2(v[1], v[0]))
+    return float(np.degrees(np.arctan2(v[1], v[0])))
 
 
 def pick_boundary_point(obj_mask, center, d_unit):
@@ -116,7 +115,6 @@ def pick_boundary_point(obj_mask, center, d_unit):
         if x < 0 or x >= w or y < 0 or y >= h:
             break
         if obj_mask[y, x] == 0:
-            # previous point is boundary-ish
             px = int(round(center[0] - d_unit[0] * max(t - 1, 0)))
             py = int(round(center[1] - d_unit[1] * max(t - 1, 0)))
             return np.array([px, py], dtype=np.float32), max(t - 1, 1.0)
@@ -128,15 +126,17 @@ def main():
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
     ap.add_argument('--obstruction-dir', required=True)
+    ap.add_argument('--background-dir', required=True)
+    ap.add_argument('--white-bg-prob', type=float, default=0.10, help='Probability to keep original white-table background')
     ap.add_argument('--data-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
     ap.add_argument('--num-synthetic', type=int, default=300)
     ap.add_argument('--entry-angle-min', type=float, default=0)
     ap.add_argument('--entry-angle-max', type=float, default=360)
     ap.add_argument('--rotation-deviation', type=float, default=20)
-    ap.add_argument('--overlap-level', type=float, default=0.8, help='0 boundary, 1 center, 2 past-center')
-    ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Target obstruction size relative to object bbox height')
-    ap.add_argument('--preview-only', action='store_true', help='Create preview image(s) in staging only, do not write train labels/images')
-    ap.add_argument('--preview-window', action='store_true', help='Show preview in an OpenCV window instead of saving overlay image')
+    ap.add_argument('--overlap-level', type=float, default=0.8, help='0=edge, 1=center, 2=past center')
+    ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Relative to object bbox height')
+    ap.add_argument('--preview-only', action='store_true')
+    ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -158,69 +158,101 @@ def main():
     if not obs_files:
         raise RuntimeError('No obstruction images found')
 
+    bg_files = [p for p in Path(args.background_dir).rglob('*') if p.suffix.lower() in IMG_EXTS]
+    if not bg_files:
+        raise RuntimeError('No background images found')
+
     pairs = []
     for im in sorted(src_img_dir.glob('*')):
         if im.suffix.lower() not in IMG_EXTS:
             continue
-
         stem = im.stem
-        # Use only original base samples by default (exclude manual/synth/obstruction derivatives).
+        # only original white-table seeds
         if any(tag in stem for tag in ['_manual_', '_synth_', '_obs_']):
             continue
-
         lb = src_lbl_dir / f'{stem}.txt'
         if lb.exists():
             pairs.append((im, lb))
     if not pairs:
-        raise RuntimeError('No source image-label pairs found')
+        raise RuntimeError('No source base image-label pairs found')
 
     made = 0
     for i in range(args.num_synthetic):
         im_path, lb_path = random.choice(pairs)
-        base = cv2.imread(str(im_path))
-        if base is None:
+        src = cv2.imread(str(im_path))
+        if src is None:
             continue
-        h, w = base.shape[:2]
+        h, w = src.shape[:2]
+
         cls_id, poly = load_yolo_polygon(lb_path, w, h)
         if poly is None:
             continue
 
-        obj_mask = poly_to_mask(poly, w, h)
-        obj_poly_i = poly.astype(np.int32)
-        x, y, bw, bh = cv2.boundingRect(obj_poly_i)
-        center = np.array([x + bw / 2.0, y + bh / 2.0], dtype=np.float32)
+        obj_mask_full = poly_to_mask(poly, w, h)
+        x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
+        obj_crop = src[y:y + bh, x:x + bw]
+        obj_crop_mask = obj_mask_full[y:y + bh, x:x + bw]
 
+        # Generate base image: 10% keep original white background, else random background
+        if random.random() < args.white_bg_prob:
+            base = src.copy()
+            placed_obj_mask = obj_mask_full.copy()
+        else:
+            base = pick_random_background(bg_files, w, h)
+            scale = random.uniform(0.85, 1.15)
+            tw = max(8, int(bw * scale))
+            th = max(8, int(bh * scale))
+            obj_r = cv2.resize(obj_crop, (tw, th), interpolation=cv2.INTER_LINEAR)
+            m_r = cv2.resize(obj_crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+
+            px = random.randint(0, max(w - tw, 0))
+            py = random.randint(0, max(h - th, 0))
+            roi = base[py:py + th, px:px + tw]
+            aa = m_r > 0
+            roi[aa] = obj_r[aa]
+            base[py:py + th, px:px + tw] = roi
+
+            placed_obj_mask = np.zeros((h, w), dtype=np.uint8)
+            placed_obj_mask[py:py + th, px:px + tw][aa] = 255
+
+        # obstruction element
         obs_img, obs_mask = load_obstruction(random.choice(obs_files))
         if obs_img is None:
             continue
 
-        # size normalize by object bbox height
+        obj_poly_new = mask_to_polygon(placed_obj_mask)
+        if obj_poly_new is None:
+            continue
+        ox, oy, obw, obh = cv2.boundingRect(obj_poly_new.astype(np.int32))
+        center = np.array([ox + obw / 2.0, oy + obh / 2.0], dtype=np.float32)
+
         oh0, ow0 = obs_mask.shape[:2]
-        target_h = max(8, int(bh * args.obstruction_scale * random.uniform(0.85, 1.15)))
+        target_h = max(8, int(obh * args.obstruction_scale * random.uniform(0.9, 1.1)))
         s = target_h / max(oh0, 1)
         tw = max(8, int(ow0 * s))
         th = max(8, int(oh0 * s))
         obs_img = cv2.resize(obs_img, (tw, th), interpolation=cv2.INTER_LINEAR)
         obs_mask = cv2.resize(obs_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
 
+        # strict orientation: bottom-middle -> top-middle points toward center
+        top_mid = np.array([tw / 2.0, 0.0], dtype=np.float32)
+        bot_mid = np.array([tw / 2.0, th - 1.0], dtype=np.float32)
+        base_vec = top_mid - bot_mid  # unrotated direction
+        base_ang = angle_deg(base_vec)
+
         entry_ang = random.uniform(args.entry_angle_min, args.entry_angle_max)
         d = np.array([np.cos(np.radians(entry_ang)), np.sin(np.radians(entry_ang))], dtype=np.float32)
-
-        # Strict orientation rule from user:
-        # vector (bottom-middle -> top-middle) of obstruction image must point toward object center.
-        # Unrotated bottom->top vector is (0, -1), i.e. -90 degrees.
-        base_ang = -90.0
         target_ang = angle_deg(d)
         rot = (target_ang - base_ang) + random.uniform(-args.rotation_deviation, args.rotation_deviation)
-        obs_img, obs_mask = rotate_bound_pair(obs_img, obs_mask, rot)
 
-        tp2, _ = top_bottom_mid_from_image_shape(obs_img)
+        obs_img, obs_mask, tpts = rotate_bound_with_points(obs_img, obs_mask, rot, [top_mid, bot_mid])
+        top_r = tpts[0]
 
-        boundary_pt, r = pick_boundary_point(obj_mask, center, d)
+        boundary_pt, r = pick_boundary_point(placed_obj_mask, center, d)
         target_top = boundary_pt + d * (args.overlap_level * r)
 
-        px = int(round(target_top[0] - tp2[0]))
-        py = int(round(target_top[1] - tp2[1]))
+        px = int(round(target_top[0] - top_r[0]))
+        py = int(round(target_top[1] - top_r[1]))
 
         oh, ow = obs_mask.shape[:2]
         x1 = max(0, px)
@@ -244,20 +276,18 @@ def main():
         full_obs = np.zeros((h, w), dtype=np.uint8)
         full_obs[y1:y2, x1:x2][om] = 255
 
-        new_obj_mask = (obj_mask > 0) & (full_obs == 0)
-        new_obj_mask = (new_obj_mask.astype(np.uint8) * 255)
+        new_obj_mask = ((placed_obj_mask > 0) & (full_obs == 0)).astype(np.uint8) * 255
         poly_new = mask_to_polygon(new_obj_mask)
         if poly_new is None:
             continue
 
         stem = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}_{i + 1:06d}'
-
         ov = base.copy()
         cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
 
         if args.preview_only and args.preview_window:
-            cv2.namedWindow('Obstruction Preview (press q/esc to close)', cv2.WINDOW_NORMAL)
-            cv2.imshow('Obstruction Preview (press q/esc to close)', ov)
+            cv2.namedWindow('Obstruction Preview (q/esc close)', cv2.WINDOW_NORMAL)
+            cv2.imshow('Obstruction Preview (q/esc close)', ov)
             while True:
                 k = cv2.waitKey(20) & 0xFF
                 if k in (ord('q'), 27):
@@ -279,7 +309,7 @@ def main():
     if args.preview_only:
         print('Preview-only mode: no train images/labels were written.')
         if args.preview_window:
-            print('Preview shown in window (no overlay file saved).')
+            print('Preview shown in window (no preview image saved).')
         else:
             print(f'Overlays dir: {out_viz_dir}')
     else:

@@ -161,12 +161,14 @@ class App(tk.Tk):
         self.obs_class_var = tk.StringVar(value='object_name')
         self.obs_class_id_var = tk.StringVar(value='0')
         self.obs_dir_var = tk.StringVar()
+        self.obs_bg_dir_var = tk.StringVar()
         self.obs_num_var = tk.StringVar(value='300')
         self.obs_angle_min_var = tk.StringVar(value='0')
         self.obs_angle_max_var = tk.StringVar(value='360')
         self.obs_rot_dev_var = tk.StringVar(value='20')
         self.obs_overlap_var = tk.StringVar(value='0.8')
         self.obs_scale_var = tk.StringVar(value='0.8')
+        self.obs_white_prob_var = tk.StringVar(value='0.10')
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_class_var).grid(row=0, column=1, sticky='we')
@@ -178,27 +180,34 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.obs_dir_var, width=70).grid(row=2, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_obs_dir).grid(row=2, column=2)
 
-        ttk.Label(frm, text='Num obstruction images').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_num_var).grid(row=3, column=1, sticky='we')
+        ttk.Label(frm, text='Background folder (for synthetic base images)').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_bg_dir_var, width=70).grid(row=3, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_obs_bg_dir).grid(row=3, column=2)
 
-        ttk.Label(frm, text='Entry angle min (deg)').grid(row=4, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_angle_min_var).grid(row=4, column=1, sticky='we')
+        ttk.Label(frm, text='Num obstruction images').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_num_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Label(frm, text='Entry angle max (deg)').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_angle_max_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Entry angle min (deg)').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_angle_min_var).grid(row=5, column=1, sticky='we')
 
-        ttk.Label(frm, text='Rotation deviation (deg)').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_rot_dev_var).grid(row=6, column=1, sticky='we')
+        ttk.Label(frm, text='Entry angle max (deg)').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_angle_max_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Label(frm, text='Overlap level (0 edge, 1 center, 2 past center)').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_overlap_var).grid(row=7, column=1, sticky='we')
+        ttk.Label(frm, text='Rotation deviation (deg)').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_rot_dev_var).grid(row=7, column=1, sticky='we')
 
-        ttk.Label(frm, text='Obstruction scale vs object height').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_scale_var).grid(row=8, column=1, sticky='we')
+        ttk.Label(frm, text='Overlap level (0 edge, 1 center, 2 past center)').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_overlap_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=9, column=0, pady=8)
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=9, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Uses only original base object masks (not manual/synth/obs). Top-middle points toward object center.').grid(row=10, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Obstruction scale vs object height').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_scale_var).grid(row=9, column=1, sticky='we')
+
+        ttk.Label(frm, text='Keep original white-table background probability (e.g. 0.10)').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_white_prob_var).grid(row=10, column=1, sticky='we')
+
+        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=11, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=11, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Base = random backgrounds + ~10% original white-table. Top-middle points toward object center.').grid(row=12, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -324,6 +333,11 @@ class App(tk.Tk):
         if p:
             self.obs_dir_var.set(p)
 
+    def pick_obs_bg_dir(self):
+        p = filedialog.askdirectory(title='Select background folder for obstruction generation')
+        if p:
+            self.obs_bg_dir_var.set(p)
+
     def autolabel(self):
         cmd = [
             str(PY), 'scripts/video_to_yoloseg_autolabel.py',
@@ -373,6 +387,8 @@ class App(tk.Tk):
             '--class-name', self.obs_class_var.get(),
             '--class-id', self.obs_class_id_var.get(),
             '--obstruction-dir', self.obs_dir_var.get(),
+            '--background-dir', self.obs_bg_dir_var.get(),
+            '--white-bg-prob', self.obs_white_prob_var.get(),
             '--entry-angle-min', self.obs_angle_min_var.get(),
             '--entry-angle-max', self.obs_angle_max_var.get(),
             '--rotation-deviation', self.obs_rot_dev_var.get(),
@@ -384,12 +400,18 @@ class App(tk.Tk):
         if not self.obs_dir_var.get().strip():
             self.log_line('Please select obstruction folder first.')
             return
+        if not self.obs_bg_dir_var.get().strip():
+            self.log_line('Please select background folder first.')
+            return
         cmd = self._obstruction_cmd_base() + ['--num-synthetic', '1', '--preview-only', '--preview-window']
         self.run_cmd(cmd)
 
     def generate_obstruction(self):
         if not self.obs_dir_var.get().strip():
             self.log_line('Please select obstruction folder first.')
+            return
+        if not self.obs_bg_dir_var.get().strip():
+            self.log_line('Please select background folder first.')
             return
         cmd = self._obstruction_cmd_base() + ['--num-synthetic', self.obs_num_var.get()]
         self.run_cmd(cmd)
