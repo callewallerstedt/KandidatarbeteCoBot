@@ -14,6 +14,8 @@ def main():
     ap.add_argument('--val', type=float, default=0.1)
     ap.add_argument('--test', type=float, default=0.1)
     ap.add_argument('--seed', type=int, default=42)
+    ap.add_argument('--mode', choices=['all', 'real', 'synth'], default='all',
+                    help='all: use all pairs, real: exclude *_synth_* files, synth: include only *_synth_* files')
     args = ap.parse_args()
 
     if round(args.train + args.val + args.test, 6) != 1.0:
@@ -33,6 +35,13 @@ def main():
         for im in sorted((images_root / cls).iterdir()):
             if im.suffix.lower() not in IMG_EXTS:
                 continue
+
+            is_synth = '_synth_' in im.stem
+            if args.mode == 'real' and is_synth:
+                continue
+            if args.mode == 'synth' and not is_synth:
+                continue
+
             lb = labels_root / cls / f'{im.stem}.txt'
             if lb.exists():
                 all_pairs.append((im, lb))
@@ -61,6 +70,7 @@ def main():
             shutil.copy2(lb, dst / 'labels' / split / lb.name)
 
     print(f'Dataset built at: {dst}')
+    print(f'mode: {args.mode}')
     for k, v in splits.items():
         print(f'{k}: {len(v)}')
 

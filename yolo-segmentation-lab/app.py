@@ -78,6 +78,7 @@ class App(tk.Tk):
         self.max_var = tk.StringVar(value='300')
         self.aug_var = tk.StringVar(value='1')
         self.classes_var = tk.StringVar(value='object_name')
+        self.split_mode_var = tk.StringVar(value='all')
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.video_var, width=70).grid(row=0, column=1, sticky='we')
@@ -102,13 +103,18 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.aug_var).grid(row=6, column=1, sticky='we')
 
         ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=7, column=0, pady=8)
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=7, column=1, pady=8, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=8, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Label(frm, text='Split mode').grid(row=7, column=1, sticky='e')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth'], state='readonly', width=10).grid(row=7, column=2, sticky='w')
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=9, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=9, column=2)
+        ttk.Label(frm, text='all = all data | real = exclude *_synth_* | synth = only *_synth_*').grid(row=8, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=9, column=0, pady=8, sticky='w')
+
+        ttk.Separator(frm, orient='horizontal').grid(row=10, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=11, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=11, column=2)
 
         frm.columnconfigure(1, weight=1)
 
@@ -185,22 +191,24 @@ class App(tk.Tk):
         self.batch_var = tk.StringVar(value='16')
         self.device_var = tk.StringVar(value='0')
 
-        ttk.Label(frm, text='Model').grid(row=0, column=0, sticky='w')
+        ttk.Label(frm, text='Model/weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.model_var).grid(row=0, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_train_model).grid(row=0, column=2)
+        ttk.Label(frm, text='Tip: yolo11n-seg.pt = fresh train, runs/.../best.pt = continue/fine-tune').grid(row=1, column=0, columnspan=3, sticky='w')
 
-        ttk.Label(frm, text='Epochs').grid(row=1, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.epochs_var).grid(row=1, column=1, sticky='we')
+        ttk.Label(frm, text='Epochs').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.epochs_var).grid(row=2, column=1, sticky='we')
 
-        ttk.Label(frm, text='Image size').grid(row=2, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.imgsz_var).grid(row=2, column=1, sticky='we')
+        ttk.Label(frm, text='Image size').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.imgsz_var).grid(row=3, column=1, sticky='we')
 
-        ttk.Label(frm, text='Batch').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.batch_var).grid(row=3, column=1, sticky='we')
+        ttk.Label(frm, text='Batch').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.batch_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Label(frm, text='Device').grid(row=4, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.device_var).grid(row=4, column=1, sticky='we')
+        ttk.Label(frm, text='Device').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.device_var).grid(row=5, column=1, sticky='we')
 
-        ttk.Button(frm, text='Start training', command=self.train).grid(row=5, column=0, pady=8)
+        ttk.Button(frm, text='Start training', command=self.train).grid(row=6, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_infer_tab(self):
@@ -247,6 +255,11 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select weights', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
             self.weights_var.set(p)
+
+    def pick_train_model(self):
+        p = filedialog.askopenfilename(title='Select model/weights for training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
+        if p:
+            self.model_var.set(p)
 
     def pick_bg_dir(self):
         p = filedialog.askdirectory(title='Select background images folder')
@@ -311,7 +324,7 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def build_split(self):
-        self.run_cmd([str(PY), 'scripts/build_dataset_split.py'])
+        self.run_cmd([str(PY), 'scripts/build_dataset_split.py', '--mode', self.split_mode_var.get()])
 
     def update_yaml(self):
         classes = self.classes_var.get().strip().split()
