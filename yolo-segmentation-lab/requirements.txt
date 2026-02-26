@@ -1,0 +1,10 @@
+ultralytics>=8.3.0
+opencv-python
+numpy
+Pillow
+pyyaml
+torch
+torchvision
+torchaudio
+rembg
+onnxruntime

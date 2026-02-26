@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+import argparse
+import random
+from pathlib import Path
+import cv2
+import numpy as np
+from rembg import remove
+
+
+def mask_to_polygon(mask, eps=0.003):
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+    c = max(cnts, key=cv2.contourArea)
+    peri = cv2.arcLength(c, True)
+    approx = cv2.approxPolyDP(c, eps * peri, True)
+    if len(approx) < 3:
+        return None
+    return approx.reshape(-1, 2)
+
+
+def write_yolo_seg(label_path: Path, class_id: int, poly, w, h):
+    vals = [str(class_id)]
+    for x, y in poly:
+        vals.append(f"{x / w:.6f}")
+        vals.append(f"{y / h:.6f}")
+    label_path.write_text(" ".join(vals) + "\n", encoding="utf-8")
+
+
+def augment(img):
+    out = img.copy()
+    alpha = random.uniform(0.85, 1.20)
+    beta = random.uniform(-20, 20)
+    out = cv2.convertScaleAbs(out, alpha=alpha, beta=beta)
+    if random.random() < 0.2:
+        k = random.choice([3, 5])
+        out = cv2.GaussianBlur(out, (k, k), 0)
+    return out
+
+
+def foreground_mask_bgr(frame_bgr):
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    out = remove(frame_rgb)
+    # rembg can return RGBA
+    if out.shape[2] == 4:
+        alpha = out[:, :, 3]
+    else:
+        gray = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
+        _, alpha = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+    _, mask = cv2.threshold(alpha, 127, 255, cv2.THRESH_BINARY)
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    return mask
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--video', required=True)
+    ap.add_argument('--class-name', required=True)
+    ap.add_argument('--class-id', type=int, required=True)
+    ap.add_argument('--out-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
+    ap.add_argument('--every', type=int, default=8)
+    ap.add_argument('--max-frames', type=int, default=400)
+    ap.add_argument('--aug-per-frame', type=int, default=1)
+    ap.add_argument('--min-area-ratio', type=float, default=0.01)
+    ap.add_argument('--max-area-ratio', type=float, default=0.80)
+    ap.add_argument('--seed', type=int, default=42)
+    args = ap.parse_args()
+
+    random.seed(args.seed)
+    out_root = Path(args.out_root)
+    images_dir = out_root / 'images' / args.class_name
+    labels_dir = out_root / 'labels' / args.class_name
+    viz_dir = out_root / 'staging' / args.class_name
+    images_dir.mkdir(parents=True, exist_ok=True)
+    labels_dir.mkdir(parents=True, exist_ok=True)
+    viz_dir.mkdir(parents=True, exist_ok=True)
+
+    cap = cv2.VideoCapture(args.video)
+    if not cap.isOpened():
+        raise RuntimeError(f'Cannot open video: {args.video}')
+
+    idx = 0
+    kept = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if idx % args.every != 0:
+            idx += 1
+            continue
+
+        for a in range(args.aug_per_frame + 1):
+            img = frame if a == 0 else augment(frame)
+            mask = foreground_mask_bgr(img)
+            h, w = mask.shape
+            area = float((mask > 0).sum()) / float(h * w)
+            if area < args.min_area_ratio or area > args.max_area_ratio:
+                continue
+
+            poly = mask_to_polygon(mask)
+            if poly is None:
+                continue
+
+            kept += 1
+            stem = f"{args.class_name}_{kept:06d}"
+            imp = images_dir / f"{stem}.jpg"
+            lbp = labels_dir / f"{stem}.txt"
+            vsp = viz_dir / f"{stem}_overlay.jpg"
+
+            cv2.imwrite(str(imp), img)
+            write_yolo_seg(lbp, args.class_id, poly, w, h)
+
+            overlay = img.copy()
+            cv2.drawContours(overlay, [poly.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+            cv2.imwrite(str(vsp), overlay)
+
+            if kept >= args.max_frames:
+                break
+
+        if kept >= args.max_frames:
+            break
+        idx += 1
+
+    cap.release()
+    print(f'Created {kept} labeled images for class={args.class_name} class_id={args.class_id}')
+    print(f'Images: {images_dir}')
+    print(f'Labels: {labels_dir}')
+    print(f'Overlays: {viz_dir}')
+
+
+if __name__ == '__main__':
+    main()
