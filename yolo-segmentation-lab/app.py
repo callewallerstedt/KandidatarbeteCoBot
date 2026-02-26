@@ -198,7 +198,7 @@ class App(tk.Tk):
 
         ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=9, column=0, pady=8)
         ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=9, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Top of obstruction image is treated as hand tip and is forced to point toward object center').grid(row=10, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Uses only original base object masks (not manual/synth/obs). Top-middle points toward object center.').grid(row=10, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -384,7 +384,7 @@ class App(tk.Tk):
         if not self.obs_dir_var.get().strip():
             self.log_line('Please select obstruction folder first.')
             return
-        cmd = self._obstruction_cmd_base() + ['--num-synthetic', '1', '--preview-only']
+        cmd = self._obstruction_cmd_base() + ['--num-synthetic', '1', '--preview-only', '--preview-window']
         self.run_cmd(cmd)
 
     def generate_obstruction(self):

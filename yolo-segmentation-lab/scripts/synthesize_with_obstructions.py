@@ -90,6 +90,13 @@ def top_point(mask):
     return np.array([float(xs[iy]), float(ys[iy])], dtype=np.float32)
 
 
+def top_bottom_mid_from_image_shape(img):
+    h, w = img.shape[:2]
+    top_mid = np.array([w / 2.0, 0.0], dtype=np.float32)
+    bottom_mid = np.array([w / 2.0, h - 1.0], dtype=np.float32)
+    return top_mid, bottom_mid
+
+
 def centroid(mask):
     ys, xs = np.where(mask > 0)
     if len(xs) == 0:
@@ -129,6 +136,7 @@ def main():
     ap.add_argument('--overlap-level', type=float, default=0.8, help='0 boundary, 1 center, 2 past-center')
     ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Target obstruction size relative to object bbox height')
     ap.add_argument('--preview-only', action='store_true', help='Create preview image(s) in staging only, do not write train labels/images')
+    ap.add_argument('--preview-window', action='store_true', help='Show preview in an OpenCV window instead of saving overlay image')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -154,8 +162,14 @@ def main():
     for im in sorted(src_img_dir.glob('*')):
         if im.suffix.lower() not in IMG_EXTS:
             continue
-        lb = src_lbl_dir / f'{im.stem}.txt'
-        if lb.exists() and '_obs_' not in im.stem:
+
+        stem = im.stem
+        # Use only original base samples by default (exclude manual/synth/obstruction derivatives).
+        if any(tag in stem for tag in ['_manual_', '_synth_', '_obs_']):
+            continue
+
+        lb = src_lbl_dir / f'{stem}.txt'
+        if lb.exists():
             pairs.append((im, lb))
     if not pairs:
         raise RuntimeError('No source image-label pairs found')
@@ -189,25 +203,18 @@ def main():
         obs_img = cv2.resize(obs_img, (tw, th), interpolation=cv2.INTER_LINEAR)
         obs_mask = cv2.resize(obs_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
 
-        tp = top_point(obs_mask)
-        cc = centroid(obs_mask)
-        if tp is None or cc is None:
-            continue
-        # Enforce: top of obstruction points toward object center.
-        # Therefore vector centroid->top must align with entry direction.
-        base_vec = tp - cc
-        base_ang = angle_deg(base_vec)
-
         entry_ang = random.uniform(args.entry_angle_min, args.entry_angle_max)
         d = np.array([np.cos(np.radians(entry_ang)), np.sin(np.radians(entry_ang))], dtype=np.float32)
 
+        # Strict orientation rule from user:
+        # vector (bottom-middle -> top-middle) of obstruction image must point toward object center.
+        # Unrotated bottom->top vector is (0, -1), i.e. -90 degrees.
+        base_ang = -90.0
         target_ang = angle_deg(d)
         rot = (target_ang - base_ang) + random.uniform(-args.rotation_deviation, args.rotation_deviation)
         obs_img, obs_mask = rotate_bound_pair(obs_img, obs_mask, rot)
 
-        tp2 = top_point(obs_mask)
-        if tp2 is None:
-            continue
+        tp2, _ = top_bottom_mid_from_image_shape(obs_img)
 
         boundary_pt, r = pick_boundary_point(obj_mask, center, d)
         target_top = boundary_pt + d * (args.overlap_level * r)
@@ -244,11 +251,21 @@ def main():
             continue
 
         stem = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}_{i + 1:06d}'
-        out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
         ov = base.copy()
         cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-        cv2.imwrite(str(out_viz), ov)
+
+        if args.preview_only and args.preview_window:
+            cv2.namedWindow('Obstruction Preview (press q/esc to close)', cv2.WINDOW_NORMAL)
+            cv2.imshow('Obstruction Preview (press q/esc to close)', ov)
+            while True:
+                k = cv2.waitKey(20) & 0xFF
+                if k in (ord('q'), 27):
+                    break
+            cv2.destroyAllWindows()
+        else:
+            out_viz = out_viz_dir / f'{stem}_overlay.jpg'
+            cv2.imwrite(str(out_viz), ov)
 
         if not args.preview_only:
             out_img = out_img_dir / f'{stem}.jpg'
@@ -261,10 +278,14 @@ def main():
     print(f'Obstruction synthetic created: {made}')
     if args.preview_only:
         print('Preview-only mode: no train images/labels were written.')
+        if args.preview_window:
+            print('Preview shown in window (no overlay file saved).')
+        else:
+            print(f'Overlays dir: {out_viz_dir}')
     else:
         print(f'Images dir: {out_img_dir}')
         print(f'Labels dir: {out_lbl_dir}')
-    print(f'Overlays dir: {out_viz_dir}')
+        print(f'Overlays dir: {out_viz_dir}')
 
 
 if __name__ == '__main__':
