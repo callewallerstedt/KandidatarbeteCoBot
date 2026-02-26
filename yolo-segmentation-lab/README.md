@@ -25,7 +25,9 @@ py -3.11 -m venv .venv
 
 ## Main app
 `app.py` has tabs for:
-- Data prep
+- Data prep (auto-label from video)
+- Synthetic BG (cut-paste augmentation from your background folder)
+- Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training
 - Inference
 

@@ -26,13 +26,19 @@ class App(tk.Tk):
         notebook.pack(fill='x')
 
         self.tab_data = ttk.Frame(notebook)
+        self.tab_synth = ttk.Frame(notebook)
+        self.tab_manual = ttk.Frame(notebook)
         self.tab_train = ttk.Frame(notebook)
         self.tab_infer = ttk.Frame(notebook)
         notebook.add(self.tab_data, text='1) Data Prep')
-        notebook.add(self.tab_train, text='2) Train')
-        notebook.add(self.tab_infer, text='3) Inference')
+        notebook.add(self.tab_synth, text='2) Synthetic BG')
+        notebook.add(self.tab_manual, text='3) Manual Real Data')
+        notebook.add(self.tab_train, text='4) Train')
+        notebook.add(self.tab_infer, text='5) Inference')
 
         self.build_data_tab()
+        self.build_synth_tab()
+        self.build_manual_tab()
         self.build_train_tab()
         self.build_infer_tab()
 
@@ -106,6 +112,71 @@ class App(tk.Tk):
 
         frm.columnconfigure(1, weight=1)
 
+    def build_synth_tab(self):
+        frm = self.tab_synth
+        self.synth_class_var = tk.StringVar(value='object_name')
+        self.synth_class_id_var = tk.StringVar(value='0')
+        self.bg_dir_var = tk.StringVar()
+        self.synth_n_var = tk.StringVar(value='300')
+        self.synth_min_scale_var = tk.StringVar(value='0.55')
+        self.synth_max_scale_var = tk.StringVar(value='1.25')
+        self.synth_rot_var = tk.StringVar(value='25')
+
+        ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_class_var).grid(row=0, column=1, sticky='we')
+
+        ttk.Label(frm, text='Class id').grid(row=1, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_class_id_var).grid(row=1, column=1, sticky='we')
+
+        ttk.Label(frm, text='Background images folder').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_bg_dir).grid(row=2, column=2)
+
+        ttk.Label(frm, text='Num synthetic images').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_n_var).grid(row=3, column=1, sticky='we')
+
+        ttk.Label(frm, text='Min scale').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_min_scale_var).grid(row=4, column=1, sticky='we')
+
+        ttk.Label(frm, text='Max scale').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_max_scale_var).grid(row=5, column=1, sticky='we')
+
+        ttk.Label(frm, text='Max rotation deg').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_rot_var).grid(row=6, column=1, sticky='we')
+
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=7, column=0, pady=8)
+        frm.columnconfigure(1, weight=1)
+
+    def build_manual_tab(self):
+        frm = self.tab_manual
+        self.manual_video_var = tk.StringVar()
+        self.manual_class_var = tk.StringVar(value='object_name')
+        self.manual_class_id_var = tk.StringVar(value='0')
+        self.manual_samples_var = tk.StringVar(value='80')
+        self.manual_prefix_var = tk.StringVar(value='manual')
+
+        ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_video_var, width=70).grid(row=0, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_manual_video).grid(row=0, column=2)
+
+        ttk.Label(frm, text='Class name').grid(row=1, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_class_var).grid(row=1, column=1, sticky='we')
+
+        ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_class_id_var).grid(row=2, column=1, sticky='we')
+
+        ttk.Label(frm, text='Evenly sampled frames').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_samples_var).grid(row=3, column=1, sticky='we')
+
+        ttk.Label(frm, text='Filename prefix').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_prefix_var).grid(row=4, column=1, sticky='we')
+
+        ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=5, column=0, pady=8)
+        ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=5, column=1, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Reviewer hotkeys: mouse draw | a add | e erase | s save | n/p next/prev | +/- brush | q quit').grid(row=6, column=0, columnspan=3, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
     def build_train_tab(self):
         frm = self.tab_train
         self.model_var = tk.StringVar(value='yolo11n-seg.pt')
@@ -177,6 +248,16 @@ class App(tk.Tk):
         if p:
             self.weights_var.set(p)
 
+    def pick_bg_dir(self):
+        p = filedialog.askdirectory(title='Select background images folder')
+        if p:
+            self.bg_dir_var.set(p)
+
+    def pick_manual_video(self):
+        p = filedialog.askopenfilename(title='Select video for manual review prep')
+        if p:
+            self.manual_video_var.set(p)
+
     def autolabel(self):
         cmd = [
             str(PY), 'scripts/video_to_yoloseg_autolabel.py',
@@ -187,6 +268,45 @@ class App(tk.Tk):
             '--every', self.every_var.get(),
             '--max-frames', self.max_var.get(),
             '--aug-per-frame', self.aug_var.get(),
+        ]
+        self.run_cmd(cmd)
+
+    def generate_synth(self):
+        if not self.bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first.')
+            return
+        cmd = [
+            str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
+            '--class-name', self.synth_class_var.get(),
+            '--class-id', self.synth_class_id_var.get(),
+            '--background-dir', self.bg_dir_var.get(),
+            '--num-synthetic', self.synth_n_var.get(),
+            '--min-scale', self.synth_min_scale_var.get(),
+            '--max-scale', self.synth_max_scale_var.get(),
+            '--max-rotation', self.synth_rot_var.get(),
+        ]
+        self.run_cmd(cmd)
+
+    def prepare_manual(self):
+        if not self.manual_video_var.get().strip():
+            self.log_line('Please select a video file first.')
+            return
+        cmd = [
+            str(PY), 'scripts/prepare_manual_review_from_video.py',
+            '--video', self.manual_video_var.get(),
+            '--class-name', self.manual_class_var.get(),
+            '--class-id', self.manual_class_id_var.get(),
+            '--num-samples', self.manual_samples_var.get(),
+            '--prefix', self.manual_prefix_var.get(),
+        ]
+        self.run_cmd(cmd)
+
+    def open_manual_reviewer(self):
+        cmd = [
+            str(PY), 'scripts/manual_mask_reviewer.py',
+            '--class-name', self.manual_class_var.get(),
+            '--class-id', self.manual_class_id_var.get(),
+            '--contains', f"{self.manual_prefix_var.get()}_",
         ]
         self.run_cmd(cmd)
 
