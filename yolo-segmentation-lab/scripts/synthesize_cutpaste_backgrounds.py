@@ -60,6 +60,25 @@ def pick_random_background(bg_files, out_w, out_h):
     return bg[y0:y0 + out_h, x0:x0 + out_w].copy()
 
 
+def rotate_bound_pair(img, mask, angle):
+    h, w = img.shape[:2]
+    cx, cy = w / 2.0, h / 2.0
+
+    M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+    cos = abs(M[0, 0])
+    sin = abs(M[0, 1])
+
+    nw = int((h * sin) + (w * cos))
+    nh = int((h * cos) + (w * sin))
+
+    M[0, 2] += (nw / 2.0) - cx
+    M[1, 2] += (nh / 2.0) - cy
+
+    rot_img = cv2.warpAffine(img, M, (nw, nh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    rot_mask = cv2.warpAffine(mask, M, (nw, nh), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    return rot_img, rot_mask
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
@@ -128,9 +147,7 @@ def main():
         crop_r = cv2.resize(crop, (tw, th), interpolation=cv2.INTER_LINEAR)
         m_r = cv2.resize(crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
 
-        M = cv2.getRotationMatrix2D((tw / 2, th / 2), angle, 1.0)
-        crop_rr = cv2.warpAffine(crop_r, M, (tw, th), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-        m_rr = cv2.warpAffine(m_r, M, (tw, th), flags=cv2.INTER_NEAREST, borderValue=0)
+        crop_rr, m_rr = rotate_bound_pair(crop_r, m_r, angle)
 
         ys, xs = np.where(m_rr > 0)
         if len(xs) < 20:
