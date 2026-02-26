@@ -147,7 +147,7 @@ def main():
         py = random.randint(0, h - oh)
 
         roi = bg[py:py + oh, px:px + ow]
-        alpha = (m_rr > 0)[:, :, None]
+        alpha = (m_rr > 0)
         roi[alpha] = crop_rr[alpha]
         bg[py:py + oh, px:px + ow] = roi
 
