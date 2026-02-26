@@ -14,8 +14,8 @@ def main():
     ap.add_argument('--val', type=float, default=0.1)
     ap.add_argument('--test', type=float, default=0.1)
     ap.add_argument('--seed', type=int, default=42)
-    ap.add_argument('--mode', choices=['all', 'real', 'synth'], default='all',
-                    help='all: use all pairs, real: exclude *_synth_* files, synth: include only *_synth_* files')
+    ap.add_argument('--mode', choices=['all', 'real', 'synth', 'obs'], default='all',
+                    help='all: all pairs, real: exclude *_synth_* and *_obs_*, synth: only *_synth_*, obs: only *_obs_*')
     args = ap.parse_args()
 
     if round(args.train + args.val + args.test, 6) != 1.0:
@@ -36,10 +36,14 @@ def main():
             if im.suffix.lower() not in IMG_EXTS:
                 continue
 
-            is_synth = '_synth_' in im.stem
-            if args.mode == 'real' and is_synth:
+            stem = im.stem
+            is_synth = '_synth_' in stem
+            is_obs = '_obs_' in stem
+            if args.mode == 'real' and (is_synth or is_obs):
                 continue
             if args.mode == 'synth' and not is_synth:
+                continue
+            if args.mode == 'obs' and not is_obs:
                 continue
 
             lb = labels_root / cls / f'{im.stem}.txt'

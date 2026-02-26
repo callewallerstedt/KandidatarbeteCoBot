@@ -108,9 +108,9 @@ class App(tk.Tk):
         ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=7, column=0, pady=8)
 
         ttk.Label(frm, text='Split mode').grid(row=7, column=1, sticky='e')
-        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth'], state='readonly', width=10).grid(row=7, column=2, sticky='w')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs'], state='readonly', width=10).grid(row=7, column=2, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = exclude *_synth_* | synth = only *_synth_*').grid(row=8, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=8, column=0, columnspan=3, sticky='w')
         ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=9, column=0, pady=8, sticky='w')
 
         ttk.Separator(frm, orient='horizontal').grid(row=10, column=0, columnspan=3, sticky='we', pady=8)
