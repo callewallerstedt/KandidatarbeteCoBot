@@ -27,7 +27,7 @@ py -3.11 -m venv .venv
 `app.py` has tabs for:
 - Data prep (auto-label from video + split mode: all/real/synth)
 - Synthetic BG (cut-paste augmentation from your background folder)
-- Obstruction Data (overlay hands/arms as occluders and subtract overlap from object mask)
+- Obstruction Data (overlay hands/arms as occluders, force tip toward object center, subtract overlap from object mask, with 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training
 - Inference

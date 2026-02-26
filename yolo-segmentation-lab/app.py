@@ -196,8 +196,9 @@ class App(tk.Tk):
         ttk.Label(frm, text='Obstruction scale vs object height').grid(row=8, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_scale_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=9, column=0, pady=8)
-        ttk.Label(frm, text='Top of obstruction image is treated as hand tip/orientation reference').grid(row=10, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=9, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=9, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Top of obstruction image is treated as hand tip and is forced to point toward object center').grid(row=10, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -366,22 +367,31 @@ class App(tk.Tk):
         ]
         self.run_cmd(cmd)
 
-    def generate_obstruction(self):
-        if not self.obs_dir_var.get().strip():
-            self.log_line('Please select obstruction folder first.')
-            return
-        cmd = [
+    def _obstruction_cmd_base(self):
+        return [
             str(PY), 'scripts/synthesize_with_obstructions.py',
             '--class-name', self.obs_class_var.get(),
             '--class-id', self.obs_class_id_var.get(),
             '--obstruction-dir', self.obs_dir_var.get(),
-            '--num-synthetic', self.obs_num_var.get(),
             '--entry-angle-min', self.obs_angle_min_var.get(),
             '--entry-angle-max', self.obs_angle_max_var.get(),
             '--rotation-deviation', self.obs_rot_dev_var.get(),
             '--overlap-level', self.obs_overlap_var.get(),
             '--obstruction-scale', self.obs_scale_var.get(),
         ]
+
+    def preview_obstruction(self):
+        if not self.obs_dir_var.get().strip():
+            self.log_line('Please select obstruction folder first.')
+            return
+        cmd = self._obstruction_cmd_base() + ['--num-synthetic', '1', '--preview-only']
+        self.run_cmd(cmd)
+
+    def generate_obstruction(self):
+        if not self.obs_dir_var.get().strip():
+            self.log_line('Please select obstruction folder first.')
+            return
+        cmd = self._obstruction_cmd_base() + ['--num-synthetic', self.obs_num_var.get()]
         self.run_cmd(cmd)
 
     def open_manual_reviewer(self):

@@ -128,6 +128,7 @@ def main():
     ap.add_argument('--rotation-deviation', type=float, default=20)
     ap.add_argument('--overlap-level', type=float, default=0.8, help='0 boundary, 1 center, 2 past-center')
     ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Target obstruction size relative to object bbox height')
+    ap.add_argument('--preview-only', action='store_true', help='Create preview image(s) in staging only, do not write train labels/images')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -192,7 +193,9 @@ def main():
         cc = centroid(obs_mask)
         if tp is None or cc is None:
             continue
-        base_vec = cc - tp  # expected "towards arm"
+        # Enforce: top of obstruction points toward object center.
+        # Therefore vector centroid->top must align with entry direction.
+        base_vec = tp - cc
         base_ang = angle_deg(base_vec)
 
         entry_ang = random.uniform(args.entry_angle_min, args.entry_angle_max)
@@ -240,22 +243,27 @@ def main():
         if poly_new is None:
             continue
 
-        stem = f'{args.class_name}_obs_{i + 1:06d}'
-        out_img = out_img_dir / f'{stem}.jpg'
-        out_lbl = out_lbl_dir / f'{stem}.txt'
+        stem = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}_{i + 1:06d}'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
-
-        cv2.imwrite(str(out_img), base)
-        write_yolo(out_lbl, args.class_id if cls_id is None else cls_id, poly_new, w, h)
 
         ov = base.copy()
         cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
         cv2.imwrite(str(out_viz), ov)
+
+        if not args.preview_only:
+            out_img = out_img_dir / f'{stem}.jpg'
+            out_lbl = out_lbl_dir / f'{stem}.txt'
+            cv2.imwrite(str(out_img), base)
+            write_yolo(out_lbl, args.class_id if cls_id is None else cls_id, poly_new, w, h)
+
         made += 1
 
     print(f'Obstruction synthetic created: {made}')
-    print(f'Images dir: {out_img_dir}')
-    print(f'Labels dir: {out_lbl_dir}')
+    if args.preview_only:
+        print('Preview-only mode: no train images/labels were written.')
+    else:
+        print(f'Images dir: {out_img_dir}')
+        print(f'Labels dir: {out_lbl_dir}')
     print(f'Overlays dir: {out_viz_dir}')
 
 
