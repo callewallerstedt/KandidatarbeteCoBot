@@ -3,7 +3,7 @@
 This folder provides a practical pipeline for your object segmentation project:
 
 1. Input object walkaround video
-2. Auto-generate frames + auto masks (pseudo labels)
+2. Auto-detect video length and sample N frames evenly + auto masks (pseudo labels)
 3. Build YOLO-seg dataset structure
 4. Train YOLO-seg model
 5. Run inference on webcam or video with mask overlays

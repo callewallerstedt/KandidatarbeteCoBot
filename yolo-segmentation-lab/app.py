@@ -60,6 +60,7 @@ class App(tk.Tk):
         self.class_var = tk.StringVar(value='object_name')
         self.class_id_var = tk.StringVar(value='0')
         self.every_var = tk.StringVar(value='8')
+        self.num_samples_var = tk.StringVar(value='120')
         self.max_var = tk.StringVar(value='300')
         self.aug_var = tk.StringVar(value='1')
         self.classes_var = tk.StringVar(value='object_name')
@@ -74,23 +75,26 @@ class App(tk.Tk):
         ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.class_id_var).grid(row=2, column=1, sticky='we')
 
-        ttk.Label(frm, text='Every N frames').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.every_var).grid(row=3, column=1, sticky='we')
+        ttk.Label(frm, text='Target samples (evenly across video)').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.num_samples_var).grid(row=3, column=1, sticky='we')
 
-        ttk.Label(frm, text='Max frames').grid(row=4, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.max_var).grid(row=4, column=1, sticky='we')
+        ttk.Label(frm, text='Fallback: every N frames (if target=0)').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.every_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Label(frm, text='Aug per frame').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.aug_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Max frames').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.max_var).grid(row=5, column=1, sticky='we')
 
-        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=6, column=0, pady=8)
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=6, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Aug per frame').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.aug_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=7, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=7, column=0, pady=8)
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=7, column=1, pady=8, sticky='w')
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=8, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=8, column=2)
+        ttk.Separator(frm, orient='horizontal').grid(row=8, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=9, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=9, column=2)
 
         frm.columnconfigure(1, weight=1)
 
@@ -163,6 +167,7 @@ class App(tk.Tk):
             '--video', self.video_var.get(),
             '--class-name', self.class_var.get(),
             '--class-id', self.class_id_var.get(),
+            '--num-samples', self.num_samples_var.get(),
             '--every', self.every_var.get(),
             '--max-frames', self.max_var.get(),
             '--aug-per-frame', self.aug_var.get(),

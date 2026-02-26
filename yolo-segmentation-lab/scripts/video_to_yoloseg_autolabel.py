@@ -60,7 +60,8 @@ def main():
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
     ap.add_argument('--out-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
-    ap.add_argument('--every', type=int, default=8)
+    ap.add_argument('--every', type=int, default=8, help='Use every N frames when --num-samples is not set')
+    ap.add_argument('--num-samples', type=int, default=0, help='If >0, sample this many frames evenly across the full video')
     ap.add_argument('--max-frames', type=int, default=400)
     ap.add_argument('--aug-per-frame', type=int, default=1)
     ap.add_argument('--min-area-ratio', type=float, default=0.01)
@@ -81,15 +82,33 @@ def main():
     if not cap.isOpened():
         raise RuntimeError(f'Cannot open video: {args.video}')
 
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    if total_frames <= 0:
+        print('Warning: could not detect total frame count, fallback to --every sampling.')
+
+    sample_indices = None
+    if args.num_samples > 0 and total_frames > 0:
+        n = min(args.num_samples, total_frames)
+        sample_indices = set(np.linspace(0, total_frames - 1, num=n, dtype=int).tolist())
+        print(f'Video frames detected: {total_frames}. Evenly sampling {len(sample_indices)} frames.')
+    else:
+        print('Using --every sampling mode.')
+
     idx = 0
     kept = 0
     while True:
         ok, frame = cap.read()
         if not ok:
             break
-        if idx % args.every != 0:
-            idx += 1
-            continue
+
+        if sample_indices is not None:
+            if idx not in sample_indices:
+                idx += 1
+                continue
+        else:
+            if idx % args.every != 0:
+                idx += 1
+                continue
 
         for a in range(args.aug_per_frame + 1):
             img = frame if a == 0 else augment(frame)
