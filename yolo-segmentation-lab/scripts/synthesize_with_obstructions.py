@@ -247,6 +247,7 @@ def main():
 
         obs_img, obs_mask, tpts = rotate_bound_with_points(obs_img, obs_mask, rot, [top_mid, bot_mid])
         top_r = tpts[0]
+        bot_r = tpts[1]
 
         boundary_pt, r = pick_boundary_point(placed_obj_mask, center, d)
         target_top = boundary_pt + d * (args.overlap_level * r)
@@ -284,6 +285,21 @@ def main():
         stem = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}_{i + 1:06d}'
         ov = base.copy()
         cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+
+        # Debug visualization: object center + obstruction direction vector
+        center_i = (int(round(center[0])), int(round(center[1])))
+        top_g = (int(round(px + top_r[0])), int(round(py + top_r[1])))
+        bot_g = (int(round(px + bot_r[0])), int(round(py + bot_r[1])))
+
+        cv2.circle(ov, center_i, 7, (0, 255, 255), -1)  # yellow center
+        cv2.putText(ov, 'center', (center_i[0] + 8, center_i[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+
+        # hand axis bottom->top (should point to center)
+        cv2.arrowedLine(ov, bot_g, top_g, (255, 0, 255), 2, tipLength=0.18)  # magenta
+        cv2.putText(ov, 'hand vec', (bot_g[0] + 8, bot_g[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1, cv2.LINE_AA)
+
+        # vector from top to center (target direction)
+        cv2.arrowedLine(ov, top_g, center_i, (255, 255, 0), 2, tipLength=0.12)  # cyan
 
         if args.preview_only and args.preview_window:
             cv2.namedWindow('Obstruction Preview (q/esc close)', cv2.WINDOW_NORMAL)

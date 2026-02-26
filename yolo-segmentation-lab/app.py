@@ -207,7 +207,7 @@ class App(tk.Tk):
 
         ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=11, column=0, pady=8)
         ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=11, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Base = random backgrounds + ~10% original white-table. Top-middle points toward object center.').grid(row=12, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=12, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
