@@ -95,7 +95,8 @@ def main():
     ap.add_argument('--overlap-prob', type=float, default=0.5)
     ap.add_argument('--min-scale', type=float, default=0.45)
     ap.add_argument('--max-scale', type=float, default=1.10)
-    ap.add_argument('--max-rotation', type=float, default=30.0)
+    ap.add_argument('--max-rotation', type=float, default=360.0)
+    ap.add_argument('--overlap-spread', type=float, default=0.35, help='Jitter factor for overlap placement (higher spreads objects more)')
     ap.add_argument('--brightness-min', type=float, default=-20.0)
     ap.add_argument('--brightness-max', type=float, default=20.0)
     ap.add_argument('--object-brightness-min', type=float, default=-10.0)
@@ -193,8 +194,10 @@ def main():
                 pyx = np.column_stack(np.where(prev > 0))
                 if len(pyx) > 0:
                     yy, xx = pyx[random.randrange(len(pyx))]
-                    px = int(np.clip(xx - ow // 2, 0, w - ow))
-                    py = int(np.clip(yy - oh // 2, 0, h - oh))
+                    jx = int(random.uniform(-1, 1) * args.overlap_spread * ow)
+                    jy = int(random.uniform(-1, 1) * args.overlap_spread * oh)
+                    px = int(np.clip(xx - ow // 2 + jx, 0, w - ow))
+                    py = int(np.clip(yy - oh // 2 + jy, 0, h - oh))
                 else:
                     px = random.randint(0, w - ow)
                     py = random.randint(0, h - oh)

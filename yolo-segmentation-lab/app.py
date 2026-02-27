@@ -421,7 +421,7 @@ class App(tk.Tk):
         self.synth_multi_overlap_var = tk.StringVar(value='0.5')
         self.synth_multi_min_scale_var = tk.StringVar(value='0.45')
         self.synth_multi_max_scale_var = tk.StringVar(value='1.10')
-        self.synth_multi_rot_var = tk.StringVar(value='30')
+        self.synth_multi_overlap_spread_var = tk.StringVar(value='0.35')
         self.synth_multi_bg_bri_min_var = tk.StringVar(value='-20')
         self.synth_multi_bg_bri_max_var = tk.StringVar(value='20')
         self.synth_multi_obj_bri_min_var = tk.StringVar(value='-10')
@@ -460,8 +460,8 @@ class App(tk.Tk):
         ttk.Label(frm, text='Max scale').grid(row=8, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_max_scale_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Max rotation deg').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_rot_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='Overlap spread (0 tight overlap, 1 wider)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_overlap_spread_var).grid(row=9, column=1, sticky='we')
 
         ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_min_var, width=10).grid(row=10, column=1, sticky='w')
@@ -497,10 +497,10 @@ class App(tk.Tk):
         self.synth_all_n_bg_var = tk.StringVar(value='300')
         self.synth_all_n_multi_var = tk.StringVar(value='200')
         self.synth_all_n_obs_var = tk.StringVar(value='200')
+        self.synth_all_preview_count_var = tk.StringVar(value='12')
 
         self.synth_all_min_scale_var = tk.StringVar(value='0.55')
         self.synth_all_max_scale_var = tk.StringVar(value='1.25')
-        self.synth_all_rot_var = tk.StringVar(value='25')
         self.synth_all_bg_bri_min_var = tk.StringVar(value='-20')
         self.synth_all_bg_bri_max_var = tk.StringVar(value='20')
         self.synth_all_obj_bri_min_var = tk.StringVar(value='-10')
@@ -511,7 +511,7 @@ class App(tk.Tk):
         self.synth_all_multi_overlap_var = tk.StringVar(value='0.5')
         self.synth_all_multi_min_scale_var = tk.StringVar(value='0.45')
         self.synth_all_multi_max_scale_var = tk.StringVar(value='1.10')
-        self.synth_all_multi_rot_var = tk.StringVar(value='30')
+        self.synth_all_multi_spread_var = tk.StringVar(value='0.35')
 
         self.synth_all_obs_angle_min_var = tk.StringVar(value='0')
         self.synth_all_obs_angle_max_var = tk.StringVar(value='360')
@@ -548,16 +548,16 @@ class App(tk.Tk):
         ttk.Label(frm, text='Count').grid(row=7, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=7, column=1, sticky='w')
         ttk.Label(frm, text='Scale min/max').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_min_scale_var, width=8).grid(row=8, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_max_scale_var, width=8).grid(row=8, column=2, sticky='w')
-        ttk.Label(frm, text='Max rotation').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_rot_var, width=8).grid(row=9, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_min_scale_var, width=6).grid(row=8, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_max_scale_var, width=6).grid(row=8, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Rotation fixed: 360').grid(row=9, column=0, sticky='w')
         ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_min_var, width=8).grid(row=10, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_max_var, width=8).grid(row=10, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_min_var, width=6).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_max_var, width=6).grid(row=10, column=1, padx=(58,0), sticky='w')
         ttk.Label(frm, text='Object brightness min/max').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_min_var, width=8).grid(row=11, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_max_var, width=8).grid(row=11, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_min_var, width=6).grid(row=11, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_max_var, width=6).grid(row=11, column=1, padx=(58,0), sticky='w')
+        ttk.Button(frm, text='Preview SYNTHETIC BG', command=self.preview_combo_bg).grid(row=11, column=2, sticky='w')
 
         ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=6)
         ttk.Label(frm, text='SYNTHETIC MULTI-INSTANCE').grid(row=13, column=0, sticky='w')
@@ -570,30 +570,37 @@ class App(tk.Tk):
         ttk.Label(frm, text='Overlap prob').grid(row=16, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_multi_overlap_var, width=8).grid(row=16, column=1, sticky='w')
         ttk.Label(frm, text='Scale min/max').grid(row=17, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=8).grid(row=17, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=8).grid(row=17, column=2, sticky='w')
-        ttk.Label(frm, text='Max rotation').grid(row=18, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_rot_var, width=8).grid(row=18, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=6).grid(row=17, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=6).grid(row=17, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Overlap spread (0 tight, 1 spread)').grid(row=18, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_spread_var, width=8).grid(row=18, column=1, sticky='w')
+        ttk.Label(frm, text='Rotation fixed: 360').grid(row=18, column=2, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=19, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='OBSTRUCTION').grid(row=20, column=0, sticky='w')
-        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_obs_var).grid(row=20, column=1, sticky='w')
-        ttk.Label(frm, text='Count').grid(row=21, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=21, column=1, sticky='w')
-        ttk.Label(frm, text='Entry angle min/max').grid(row=22, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_min_var, width=8).grid(row=22, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=8).grid(row=22, column=2, sticky='w')
-        ttk.Label(frm, text='Rotation deviation').grid(row=23, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=23, column=1, sticky='w')
-        ttk.Label(frm, text='Overlap level').grid(row=24, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_var, width=8).grid(row=24, column=1, sticky='w')
-        ttk.Label(frm, text='Obstruction scale').grid(row=25, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_var, width=8).grid(row=25, column=1, sticky='w')
-        ttk.Label(frm, text='White-bg prob').grid(row=26, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=26, column=1, sticky='w')
+        ttk.Button(frm, text='Preview SYNTHETIC MULTI-INSTANCE', command=self.preview_combo_multi).grid(row=19, column=0, sticky='w')
 
-        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=27, column=0, pady=10)
-        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=28, column=0, columnspan=3, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=20, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='OBSTRUCTION').grid(row=21, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_obs_var).grid(row=21, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=22, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=22, column=1, sticky='w')
+        ttk.Label(frm, text='Entry angle min/max').grid(row=23, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_min_var, width=6).grid(row=23, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=6).grid(row=23, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Rotation deviation').grid(row=24, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=24, column=1, sticky='w')
+        ttk.Label(frm, text='Overlap level').grid(row=25, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_var, width=8).grid(row=25, column=1, sticky='w')
+        ttk.Label(frm, text='Obstruction scale').grid(row=26, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_var, width=8).grid(row=26, column=1, sticky='w')
+        ttk.Label(frm, text='White-bg prob').grid(row=27, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=27, column=1, sticky='w')
+        ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=27, column=2, sticky='w')
+
+        ttk.Label(frm, text='Preview count (all previews)').grid(row=28, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_preview_count_var, width=8).grid(row=28, column=1, sticky='w')
+
+        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=29, column=0, pady=10)
+        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=30, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -1106,7 +1113,8 @@ class App(tk.Tk):
             '--overlap-prob', self.synth_multi_overlap_var.get(),
             '--min-scale', self.synth_multi_min_scale_var.get(),
             '--max-scale', self.synth_multi_max_scale_var.get(),
-            '--max-rotation', self.synth_multi_rot_var.get(),
+            '--max-rotation', '360',
+            '--overlap-spread', self.synth_multi_overlap_spread_var.get(),
             '--brightness-min', self.synth_multi_bg_bri_min_var.get(),
             '--brightness-max', self.synth_multi_bg_bri_max_var.get(),
             '--object-brightness-min', self.synth_multi_obj_bri_min_var.get(),
@@ -1148,6 +1156,85 @@ class App(tk.Tk):
         ]
         self.run_cmd(cmd)
 
+    def preview_combo_bg(self):
+        if not self.ensure_class_registered(self.synth_all_class_var.get(), self.synth_all_class_id_var.get()):
+            return
+        if not self.synth_all_bg_dir_var.get().strip():
+            self.log_line('COMBO RUN preview: select background folder first.')
+            return
+        base = self.synth_all_run_var.get().strip() or 'combo01'
+        cmd = [
+            str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
+            '--class-name', self.synth_all_class_var.get(),
+            '--class-id', self.synth_all_class_id_var.get(),
+            '--background-dir', self.synth_all_bg_dir_var.get().strip(),
+            '--num-synthetic', '1',
+            '--min-scale', self.synth_all_min_scale_var.get(),
+            '--max-scale', self.synth_all_max_scale_var.get(),
+            '--max-rotation', '360',
+            '--brightness-min', self.synth_all_bg_bri_min_var.get(),
+            '--brightness-max', self.synth_all_bg_bri_max_var.get(),
+            '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
+            '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+            '--run-name', f'{base}_bg_preview',
+            '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
+        ]
+        self.run_cmd(cmd)
+
+    def preview_combo_multi(self):
+        if not self.ensure_class_registered(self.synth_all_class_var.get(), self.synth_all_class_id_var.get()):
+            return
+        if not self.synth_all_bg_dir_var.get().strip():
+            self.log_line('COMBO RUN preview: select background folder first.')
+            return
+        base = self.synth_all_run_var.get().strip() or 'combo01'
+        cmd = [
+            str(PY), 'scripts/synthesize_multi_instance.py',
+            '--class-name', self.synth_all_class_var.get(),
+            '--class-id', self.synth_all_class_id_var.get(),
+            '--background-dir', self.synth_all_bg_dir_var.get().strip(),
+            '--num-synthetic', '1',
+            '--min-objects', self.synth_all_multi_min_obj_var.get(),
+            '--max-objects', self.synth_all_multi_max_obj_var.get(),
+            '--overlap-prob', self.synth_all_multi_overlap_var.get(),
+            '--overlap-spread', self.synth_all_multi_spread_var.get(),
+            '--min-scale', self.synth_all_multi_min_scale_var.get(),
+            '--max-scale', self.synth_all_multi_max_scale_var.get(),
+            '--max-rotation', '360',
+            '--brightness-min', self.synth_all_bg_bri_min_var.get(),
+            '--brightness-max', self.synth_all_bg_bri_max_var.get(),
+            '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
+            '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+            '--run-name', f'{base}_multi_preview',
+            '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
+        ]
+        self.run_cmd(cmd)
+
+    def preview_combo_obs(self):
+        if not self.ensure_class_registered(self.synth_all_class_var.get(), self.synth_all_class_id_var.get()):
+            return
+        if not self.synth_all_bg_dir_var.get().strip() or not self.synth_all_obs_dir_var.get().strip():
+            self.log_line('COMBO RUN obstruction preview: select both background and obstruction folder first.')
+            return
+        base = self.synth_all_run_var.get().strip() or 'combo01'
+        cmd = [
+            str(PY), 'scripts/synthesize_with_obstructions.py',
+            '--class-name', self.synth_all_class_var.get(),
+            '--class-id', self.synth_all_class_id_var.get(),
+            '--obstruction-dir', self.synth_all_obs_dir_var.get().strip(),
+            '--background-dir', self.synth_all_bg_dir_var.get().strip(),
+            '--num-synthetic', '1',
+            '--entry-angle-min', self.synth_all_obs_angle_min_var.get(),
+            '--entry-angle-max', self.synth_all_obs_angle_max_var.get(),
+            '--rotation-deviation', self.synth_all_obs_rot_dev_var.get(),
+            '--overlap-level', self.synth_all_obs_overlap_var.get(),
+            '--obstruction-scale', self.synth_all_obs_scale_var.get(),
+            '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
+            '--run-name', f'{base}_obs_preview',
+            '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
+        ]
+        self.run_cmd(cmd)
+
     def copy_combo_base_to_run_filter(self):
         base = (self.synth_all_run_var.get() or '').strip()
         if not base:
@@ -1181,7 +1268,7 @@ class App(tk.Tk):
                 '--num-synthetic', str(n_bg),
                 '--min-scale', self.synth_all_min_scale_var.get(),
                 '--max-scale', self.synth_all_max_scale_var.get(),
-                '--max-rotation', self.synth_all_rot_var.get(),
+                '--max-rotation', '360',
                 '--brightness-min', self.synth_all_bg_bri_min_var.get(),
                 '--brightness-max', self.synth_all_bg_bri_max_var.get(),
                 '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
@@ -1199,9 +1286,10 @@ class App(tk.Tk):
                 '--min-objects', self.synth_all_multi_min_obj_var.get(),
                 '--max-objects', self.synth_all_multi_max_obj_var.get(),
                 '--overlap-prob', self.synth_all_multi_overlap_var.get(),
+                '--overlap-spread', self.synth_all_multi_spread_var.get(),
                 '--min-scale', self.synth_all_multi_min_scale_var.get(),
                 '--max-scale', self.synth_all_multi_max_scale_var.get(),
-                '--max-rotation', self.synth_all_multi_rot_var.get(),
+                '--max-rotation', '360',
                 '--brightness-min', self.synth_all_bg_bri_min_var.get(),
                 '--brightness-max', self.synth_all_bg_bri_max_var.get(),
                 '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
