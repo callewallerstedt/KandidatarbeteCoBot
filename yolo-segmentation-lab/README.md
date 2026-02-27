@@ -33,7 +33,7 @@ py -3.11 -m venv .venv
 - Synthetic BG (cut-paste augmentation from your background folder, with min/max preview for scale/brightness)
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with live 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
-- Training
+- Training (with configurable dataloader workers; on Windows use workers=0 for stability)
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
 - Inference (including explicit webcam capture resolution controls, e.g. 1920x1080)
 

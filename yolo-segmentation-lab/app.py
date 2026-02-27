@@ -516,6 +516,7 @@ class App(tk.Tk):
         self.imgsz_var = tk.StringVar(value='640')
         self.batch_var = tk.StringVar(value='16')
         self.device_var = tk.StringVar(value='0')
+        self.workers_var = tk.StringVar(value='0')
 
         ttk.Label(frm, text='Model/weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.model_var).grid(row=0, column=1, sticky='we')
@@ -534,7 +535,10 @@ class App(tk.Tk):
         ttk.Label(frm, text='Device').grid(row=5, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.device_var).grid(row=5, column=1, sticky='we')
 
-        ttk.Button(frm, text='Start training', command=self.train).grid(row=6, column=0, pady=8)
+        ttk.Label(frm, text='Workers (Windows: use 0)').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.workers_var).grid(row=6, column=1, sticky='we')
+
+        ttk.Button(frm, text='Start training', command=self.train).grid(row=7, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_ddp_tab(self):
@@ -980,6 +984,7 @@ class App(tk.Tk):
             '--imgsz', self.imgsz_var.get(),
             '--batch', self.batch_var.get(),
             '--device', self.device_var.get(),
+            '--workers', self.workers_var.get(),
         ]
         self.run_cmd(cmd)
 

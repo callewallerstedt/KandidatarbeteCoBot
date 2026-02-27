@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 from pathlib import Path
 from ultralytics import YOLO
 
@@ -14,6 +15,7 @@ def main():
     ap.add_argument('--device', default='0')
     ap.add_argument('--project', default=str(Path(__file__).resolve().parents[1] / 'runs' / 'segment'))
     ap.add_argument('--name', default='train')
+    ap.add_argument('--workers', type=int, default=(0 if os.name == 'nt' else 4))
     args = ap.parse_args()
 
     model = YOLO(args.model)
@@ -26,6 +28,7 @@ def main():
         project=args.project,
         name=args.name,
         task='segment',
+        workers=args.workers,
     )
 
 
