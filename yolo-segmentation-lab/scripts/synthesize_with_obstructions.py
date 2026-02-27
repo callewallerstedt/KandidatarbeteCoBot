@@ -134,8 +134,12 @@ def main():
     ap.add_argument('--entry-angle-min', type=float, default=0)
     ap.add_argument('--entry-angle-max', type=float, default=360)
     ap.add_argument('--rotation-deviation', type=float, default=20)
-    ap.add_argument('--overlap-level', type=float, default=0.8, help='0=edge, 1=center, 2=past center')
-    ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Relative to object bbox height')
+    ap.add_argument('--overlap-level', type=float, default=0.8, help='Fixed overlap level (legacy single value)')
+    ap.add_argument('--overlap-min', type=float, default=None, help='Min overlap level (recommended)')
+    ap.add_argument('--overlap-max', type=float, default=None, help='Max overlap level (recommended)')
+    ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Fixed obstruction scale (legacy single value)')
+    ap.add_argument('--obstruction-scale-min', type=float, default=None, help='Min obstruction scale')
+    ap.add_argument('--obstruction-scale-max', type=float, default=None, help='Max obstruction scale')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-count', type=int, default=12)
@@ -234,7 +238,10 @@ def main():
         center = np.array([ox + obw / 2.0, oy + obh / 2.0], dtype=np.float32)
 
         oh0, ow0 = obs_mask.shape[:2]
-        target_h = max(8, int(obh * args.obstruction_scale * random.uniform(0.9, 1.1)))
+        scale_min = args.obstruction_scale_min if args.obstruction_scale_min is not None else args.obstruction_scale
+        scale_max = args.obstruction_scale_max if args.obstruction_scale_max is not None else args.obstruction_scale
+        chosen_scale = random.uniform(min(scale_min, scale_max), max(scale_min, scale_max))
+        target_h = max(8, int(obh * chosen_scale * random.uniform(0.95, 1.05)))
         s = target_h / max(oh0, 1)
         tw = max(8, int(ow0 * s))
         th = max(8, int(oh0 * s))
@@ -257,7 +264,10 @@ def main():
         bot_r = tpts[1]
 
         boundary_pt, r = pick_boundary_point(placed_obj_mask, center, d)
-        target_top = boundary_pt + d * (args.overlap_level * r)
+        ov_min = args.overlap_min if args.overlap_min is not None else args.overlap_level
+        ov_max = args.overlap_max if args.overlap_max is not None else args.overlap_level
+        chosen_overlap = random.uniform(min(ov_min, ov_max), max(ov_min, ov_max))
+        target_top = boundary_pt + d * (chosen_overlap * r)
 
         px = int(round(target_top[0] - top_r[0]))
         py = int(round(target_top[1] - top_r[1]))

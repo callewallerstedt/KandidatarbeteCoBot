@@ -21,11 +21,45 @@ class App(tk.Tk):
         self.title('YOLO Segmentation Lab')
         self.geometry('980x720')
 
-        self.log = tk.Text(self, wrap='word')
-        self.log.pack(side='bottom', fill='both', expand=True)
+        paned = ttk.Panedwindow(self, orient='vertical')
+        paned.pack(fill='both', expand=True)
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill='x')
+        top_container = ttk.Frame(paned)
+        log_container = ttk.Frame(paned)
+        paned.add(top_container, weight=4)
+        paned.add(log_container, weight=1)
+
+        self.top_canvas = tk.Canvas(top_container, highlightthickness=0)
+        self.top_scroll = ttk.Scrollbar(top_container, orient='vertical', command=self.top_canvas.yview)
+        self.top_canvas.configure(yscrollcommand=self.top_scroll.set)
+        self.top_scroll.pack(side='right', fill='y')
+        self.top_canvas.pack(side='left', fill='both', expand=True)
+
+        self.top_inner = ttk.Frame(self.top_canvas)
+        self._top_window = self.top_canvas.create_window((0, 0), window=self.top_inner, anchor='nw')
+
+        def _on_top_inner_config(_e=None):
+            self.top_canvas.configure(scrollregion=self.top_canvas.bbox('all'))
+
+        def _on_top_canvas_config(e):
+            self.top_canvas.itemconfig(self._top_window, width=e.width)
+
+        self.top_inner.bind('<Configure>', _on_top_inner_config)
+        self.top_canvas.bind('<Configure>', _on_top_canvas_config)
+
+        def _on_mousewheel(event):
+            delta = event.delta
+            if delta == 0:
+                return
+            self.top_canvas.yview_scroll(int(-delta / 120), 'units')
+
+        self.bind_all('<MouseWheel>', _on_mousewheel)
+
+        self.log = tk.Text(log_container, wrap='word', height=10)
+        self.log.pack(fill='both', expand=True)
+
+        notebook = ttk.Notebook(self.top_inner)
+        notebook.pack(fill='both', expand=True)
 
         self.tab_instructions = ttk.Frame(notebook)
         self.tab_data = ttk.Frame(notebook)
@@ -526,8 +560,10 @@ class App(tk.Tk):
         self.synth_all_obs_angle_min_var = tk.StringVar(value='0')
         self.synth_all_obs_angle_max_var = tk.StringVar(value='360')
         self.synth_all_obs_rot_dev_var = tk.StringVar(value='20')
-        self.synth_all_obs_overlap_var = tk.StringVar(value='0.8')
-        self.synth_all_obs_scale_var = tk.StringVar(value='0.8')
+        self.synth_all_obs_overlap_min_var = tk.StringVar(value='0.6')
+        self.synth_all_obs_overlap_max_var = tk.StringVar(value='1.1')
+        self.synth_all_obs_scale_min_var = tk.StringVar(value='0.7')
+        self.synth_all_obs_scale_max_var = tk.StringVar(value='1.0')
         self.synth_all_obs_white_prob_var = tk.StringVar(value='0.10')
 
         self.synth_all_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_all_class_var, self.synth_all_class_id_var))
@@ -602,10 +638,12 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=6).grid(row=23, column=1, padx=(58,0), sticky='w')
         ttk.Label(frm, text='Rotation deviation').grid(row=24, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=24, column=1, sticky='w')
-        ttk.Label(frm, text='Overlap level').grid(row=25, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_var, width=8).grid(row=25, column=1, sticky='w')
-        ttk.Label(frm, text='Obstruction scale').grid(row=26, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_var, width=8).grid(row=26, column=1, sticky='w')
+        ttk.Label(frm, text='Overlap min/max').grid(row=25, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_min_var, width=6).grid(row=25, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_max_var, width=6).grid(row=25, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Obstruction scale min/max').grid(row=26, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_min_var, width=6).grid(row=26, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_max_var, width=6).grid(row=26, column=1, padx=(58,0), sticky='w')
         ttk.Label(frm, text='White-bg prob').grid(row=27, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=27, column=1, sticky='w')
         ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=27, column=2, sticky='w')
@@ -1245,8 +1283,10 @@ class App(tk.Tk):
             '--entry-angle-min', self.synth_all_obs_angle_min_var.get(),
             '--entry-angle-max', self.synth_all_obs_angle_max_var.get(),
             '--rotation-deviation', self.synth_all_obs_rot_dev_var.get(),
-            '--overlap-level', self.synth_all_obs_overlap_var.get(),
-            '--obstruction-scale', self.synth_all_obs_scale_var.get(),
+            '--overlap-min', self.synth_all_obs_overlap_min_var.get(),
+            '--overlap-max', self.synth_all_obs_overlap_max_var.get(),
+            '--obstruction-scale-min', self.synth_all_obs_scale_min_var.get(),
+            '--obstruction-scale-max', self.synth_all_obs_scale_max_var.get(),
             '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
             '--run-name', f'{base}_obs_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
@@ -1331,8 +1371,10 @@ class App(tk.Tk):
                     '--entry-angle-min', self.synth_all_obs_angle_min_var.get(),
                     '--entry-angle-max', self.synth_all_obs_angle_max_var.get(),
                     '--rotation-deviation', self.synth_all_obs_rot_dev_var.get(),
-                    '--overlap-level', self.synth_all_obs_overlap_var.get(),
-                    '--obstruction-scale', self.synth_all_obs_scale_var.get(),
+                    '--overlap-min', self.synth_all_obs_overlap_min_var.get(),
+                    '--overlap-max', self.synth_all_obs_overlap_max_var.get(),
+                    '--obstruction-scale-min', self.synth_all_obs_scale_min_var.get(),
+                    '--obstruction-scale-max', self.synth_all_obs_scale_max_var.get(),
                     '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
                     '--run-name', f'{base}_obs',
                 ]

@@ -32,7 +32,8 @@ py -3.11 -m venv .venv
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time
 - Synthetic BG (cut-paste augmentation from your background folder, with browsable preview samples via left/right)
 - Multi-Instance Synth (clustered same-class objects, touching/overlap behavior with max-overlap cap, with browsable preview samples)
-- COMBO RUN (run Synthetic BG + Multi-Instance + Obstruction in one go, with per-mode settings, enable toggles, and per-section preview browsers)
+- COMBO RUN (run Synthetic BG + Multi-Instance + Obstruction in one go, with per-mode settings, enable toggles, per-section preview browsers, and obstruction min/max overlap+scale controls)
+- App layout now uses a scrollable top tool area so controls do not get hidden behind the log console.
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with browsable preview samples)
 - Add Masked Object (draw bbox on an image to extract object via GrabCut and save as a masked source sample for later synth generation)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
