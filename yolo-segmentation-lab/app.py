@@ -42,7 +42,7 @@ class App(tk.Tk):
         notebook.add(self.tab_data, text='1) Data Prep')
         notebook.add(self.tab_synth, text='2) Synthetic BG')
         notebook.add(self.tab_synth_multi, text='3) Multi-Instance Synth')
-        notebook.add(self.tab_synth_all, text='4) All Synth Runner')
+        notebook.add(self.tab_synth_all, text='4) COMBO RUN')
         notebook.add(self.tab_obstruction, text='5) Obstruction Data')
         notebook.add(self.tab_cutout, text='6) Add Masked Object')
         notebook.add(self.tab_manual, text='7) Manual Real Data')
@@ -332,8 +332,8 @@ class App(tk.Tk):
         self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
         self.split_class_cb.grid(row=10, column=1, sticky='w')
 
-        ttk.Label(frm, text='Run filter (optional, e.g. run_20260227_120000)').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.split_run_var, width=34).grid(row=11, column=1, sticky='w')
+        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=11, column=1, sticky='w')
 
         ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only synth_runs | obs = only obs_runs').grid(row=12, column=0, columnspan=3, sticky='w')
         ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=13, column=0, pady=8, sticky='w')
@@ -488,10 +488,38 @@ class App(tk.Tk):
         self.synth_all_class_id_var = tk.StringVar(value='0')
         self.synth_all_bg_dir_var = tk.StringVar()
         self.synth_all_obs_dir_var = tk.StringVar()
-        self.synth_all_run_var = tk.StringVar(value='allrun')
+        self.synth_all_run_var = tk.StringVar(value='combo01')
+
+        self.synth_all_use_bg_var = tk.BooleanVar(value=True)
+        self.synth_all_use_multi_var = tk.BooleanVar(value=True)
+        self.synth_all_use_obs_var = tk.BooleanVar(value=True)
+
         self.synth_all_n_bg_var = tk.StringVar(value='300')
         self.synth_all_n_multi_var = tk.StringVar(value='200')
         self.synth_all_n_obs_var = tk.StringVar(value='200')
+
+        self.synth_all_min_scale_var = tk.StringVar(value='0.55')
+        self.synth_all_max_scale_var = tk.StringVar(value='1.25')
+        self.synth_all_rot_var = tk.StringVar(value='25')
+        self.synth_all_bg_bri_min_var = tk.StringVar(value='-20')
+        self.synth_all_bg_bri_max_var = tk.StringVar(value='20')
+        self.synth_all_obj_bri_min_var = tk.StringVar(value='-10')
+        self.synth_all_obj_bri_max_var = tk.StringVar(value='10')
+
+        self.synth_all_multi_min_obj_var = tk.StringVar(value='2')
+        self.synth_all_multi_max_obj_var = tk.StringVar(value='5')
+        self.synth_all_multi_overlap_var = tk.StringVar(value='0.5')
+        self.synth_all_multi_min_scale_var = tk.StringVar(value='0.45')
+        self.synth_all_multi_max_scale_var = tk.StringVar(value='1.10')
+        self.synth_all_multi_rot_var = tk.StringVar(value='30')
+
+        self.synth_all_obs_angle_min_var = tk.StringVar(value='0')
+        self.synth_all_obs_angle_max_var = tk.StringVar(value='360')
+        self.synth_all_obs_rot_dev_var = tk.StringVar(value='20')
+        self.synth_all_obs_overlap_var = tk.StringVar(value='0.8')
+        self.synth_all_obs_scale_var = tk.StringVar(value='0.8')
+        self.synth_all_obs_white_prob_var = tk.StringVar(value='0.10')
+
         self.synth_all_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_all_class_var, self.synth_all_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -506,24 +534,66 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_all_bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_synth_all_bg_dir).grid(row=2, column=2)
 
-        ttk.Label(frm, text='Obstruction folder (for obs mode)').grid(row=3, column=0, sticky='w')
+        ttk.Label(frm, text='Obstruction folder').grid(row=3, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_obs_dir_var, width=70).grid(row=3, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_synth_all_obs_dir).grid(row=3, column=2)
 
-        ttk.Label(frm, text='Run base name').grid(row=4, column=0, sticky='w')
+        ttk.Label(frm, text='Run base name (for run filter)').grid(row=4, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_run_var).grid(row=4, column=1, sticky='we')
+        ttk.Button(frm, text='Copy base -> Run filter', command=self.copy_combo_base_to_run_filter).grid(row=4, column=2)
 
-        ttk.Label(frm, text='Synthetic BG count').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=5, column=1, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='SYNTHETIC BG').grid(row=6, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_bg_var).grid(row=6, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=7, column=1, sticky='w')
+        ttk.Label(frm, text='Scale min/max').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_min_scale_var, width=8).grid(row=8, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_max_scale_var, width=8).grid(row=8, column=2, sticky='w')
+        ttk.Label(frm, text='Max rotation').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_rot_var, width=8).grid(row=9, column=1, sticky='w')
+        ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_min_var, width=8).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_max_var, width=8).grid(row=10, column=2, sticky='w')
+        ttk.Label(frm, text='Object brightness min/max').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_min_var, width=8).grid(row=11, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_max_var, width=8).grid(row=11, column=2, sticky='w')
 
-        ttk.Label(frm, text='Multi-instance count').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_multi_var, width=10).grid(row=6, column=1, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='SYNTHETIC MULTI-INSTANCE').grid(row=13, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_multi_var).grid(row=13, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_multi_var, width=10).grid(row=14, column=1, sticky='w')
+        ttk.Label(frm, text='Min/Max objects').grid(row=15, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_min_obj_var, width=8).grid(row=15, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_obj_var, width=8).grid(row=15, column=2, sticky='w')
+        ttk.Label(frm, text='Overlap prob').grid(row=16, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_overlap_var, width=8).grid(row=16, column=1, sticky='w')
+        ttk.Label(frm, text='Scale min/max').grid(row=17, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=8).grid(row=17, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=8).grid(row=17, column=2, sticky='w')
+        ttk.Label(frm, text='Max rotation').grid(row=18, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_rot_var, width=8).grid(row=18, column=1, sticky='w')
 
-        ttk.Label(frm, text='Obstruction count').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=7, column=1, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=19, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='OBSTRUCTION').grid(row=20, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_obs_var).grid(row=20, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=21, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=21, column=1, sticky='w')
+        ttk.Label(frm, text='Entry angle min/max').grid(row=22, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_min_var, width=8).grid(row=22, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=8).grid(row=22, column=2, sticky='w')
+        ttk.Label(frm, text='Rotation deviation').grid(row=23, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=23, column=1, sticky='w')
+        ttk.Label(frm, text='Overlap level').grid(row=24, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_var, width=8).grid(row=24, column=1, sticky='w')
+        ttk.Label(frm, text='Obstruction scale').grid(row=25, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_var, width=8).grid(row=25, column=1, sticky='w')
+        ttk.Label(frm, text='White-bg prob').grid(row=26, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=26, column=1, sticky='w')
 
-        ttk.Button(frm, text='Run all synthetic generators', command=self.run_all_synth).grid(row=8, column=0, pady=8)
-        ttk.Label(frm, text='Creates runs named <base>_bg, <base>_multi, <base>_obs. Use run filter with base name later.').grid(row=9, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=27, column=0, pady=10)
+        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=28, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -1078,14 +1148,22 @@ class App(tk.Tk):
         ]
         self.run_cmd(cmd)
 
+    def copy_combo_base_to_run_filter(self):
+        base = (self.synth_all_run_var.get() or '').strip()
+        if not base:
+            self.log_line('COMBO RUN base is empty; cannot copy to run filter.')
+            return
+        self.split_run_var.set(base)
+        self.log_line(f'Copied COMBO RUN base to Data Prep run filter: {base}')
+
     def run_all_synth(self):
         if not self.ensure_class_registered(self.synth_all_class_var.get(), self.synth_all_class_id_var.get()):
             return
         if not self.synth_all_bg_dir_var.get().strip():
-            self.log_line('Please select a background folder for all-synth runner.')
+            self.log_line('Please select a background folder for COMBO RUN.')
             return
 
-        base = self.synth_all_run_var.get().strip() or 'allrun'
+        base = self.synth_all_run_var.get().strip() or 'combo01'
         cls = self.synth_all_class_var.get()
         cid = self.synth_all_class_id_var.get()
         bg = self.synth_all_bg_dir_var.get().strip()
@@ -1095,29 +1173,46 @@ class App(tk.Tk):
         n_multi = int(self.synth_all_n_multi_var.get() or '0')
         n_obs = int(self.synth_all_n_obs_var.get() or '0')
 
-        if n_bg > 0:
+        if self.synth_all_use_bg_var.get() and n_bg > 0:
             cmd_bg = [
                 str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
                 '--class-name', cls, '--class-id', cid,
                 '--background-dir', bg,
                 '--num-synthetic', str(n_bg),
+                '--min-scale', self.synth_all_min_scale_var.get(),
+                '--max-scale', self.synth_all_max_scale_var.get(),
+                '--max-rotation', self.synth_all_rot_var.get(),
+                '--brightness-min', self.synth_all_bg_bri_min_var.get(),
+                '--brightness-max', self.synth_all_bg_bri_max_var.get(),
+                '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
+                '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
                 '--run-name', f'{base}_bg',
             ]
             self.run_cmd(cmd_bg)
 
-        if n_multi > 0:
+        if self.synth_all_use_multi_var.get() and n_multi > 0:
             cmd_multi = [
                 str(PY), 'scripts/synthesize_multi_instance.py',
                 '--class-name', cls, '--class-id', cid,
                 '--background-dir', bg,
                 '--num-synthetic', str(n_multi),
+                '--min-objects', self.synth_all_multi_min_obj_var.get(),
+                '--max-objects', self.synth_all_multi_max_obj_var.get(),
+                '--overlap-prob', self.synth_all_multi_overlap_var.get(),
+                '--min-scale', self.synth_all_multi_min_scale_var.get(),
+                '--max-scale', self.synth_all_multi_max_scale_var.get(),
+                '--max-rotation', self.synth_all_multi_rot_var.get(),
+                '--brightness-min', self.synth_all_bg_bri_min_var.get(),
+                '--brightness-max', self.synth_all_bg_bri_max_var.get(),
+                '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
+                '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
                 '--run-name', f'{base}_multi',
             ]
             self.run_cmd(cmd_multi)
 
-        if n_obs > 0:
+        if self.synth_all_use_obs_var.get() and n_obs > 0:
             if not obs:
-                self.log_line('Obstruction count > 0 but no obstruction folder selected.')
+                self.log_line('COMBO RUN: Obstruction enabled but no obstruction folder selected.')
             else:
                 cmd_obs = [
                     str(PY), 'scripts/synthesize_with_obstructions.py',
@@ -1125,11 +1220,18 @@ class App(tk.Tk):
                     '--obstruction-dir', obs,
                     '--background-dir', bg,
                     '--num-synthetic', str(n_obs),
+                    '--entry-angle-min', self.synth_all_obs_angle_min_var.get(),
+                    '--entry-angle-max', self.synth_all_obs_angle_max_var.get(),
+                    '--rotation-deviation', self.synth_all_obs_rot_dev_var.get(),
+                    '--overlap-level', self.synth_all_obs_overlap_var.get(),
+                    '--obstruction-scale', self.synth_all_obs_scale_var.get(),
+                    '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
                     '--run-name', f'{base}_obs',
                 ]
                 self.run_cmd(cmd_obs)
 
-        self.log_line(f'All-synth runner started with run base: {base}. Use run filter "{base}" in Data Prep.')
+        self.split_run_var.set(base)
+        self.log_line(f'COMBO RUN started with base: {base}. Data Prep run filter auto-set to "{base}". Build split, then train.')
 
     def prepare_manual(self):
         if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
