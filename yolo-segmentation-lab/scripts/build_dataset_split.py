@@ -16,6 +16,7 @@ def main():
     ap.add_argument('--seed', type=int, default=42)
     ap.add_argument('--mode', choices=['all', 'real', 'synth', 'obs'], default='all',
                     help='all: all pairs, real: exclude *_synth_* and *_obs_*, synth: only *_synth_*, obs: only *_obs_*')
+    ap.add_argument('--class-name', default='', help='Optional single class folder name to include (e.g. bottle). Empty = all classes')
     args = ap.parse_args()
 
     if round(args.train + args.val + args.test, 6) != 1.0:
@@ -30,6 +31,12 @@ def main():
     classes = sorted([d.name for d in images_root.iterdir() if d.is_dir()]) if images_root.exists() else []
     if not classes:
         raise RuntimeError('No class folders found in data/images')
+
+    if args.class_name.strip():
+        wanted = args.class_name.strip()
+        if wanted not in classes:
+            raise RuntimeError(f'class-name not found in data/images: {wanted}')
+        classes = [wanted]
 
     for cls in classes:
         for im in sorted((images_root / cls).iterdir()):
@@ -66,6 +73,9 @@ def main():
         'test': all_pairs[n_train+n_val:],
     }
 
+    if dst.exists():
+        shutil.rmtree(dst)
+
     for split, items in splits.items():
         (dst / 'images' / split).mkdir(parents=True, exist_ok=True)
         (dst / 'labels' / split).mkdir(parents=True, exist_ok=True)
@@ -75,6 +85,7 @@ def main():
 
     print(f'Dataset built at: {dst}')
     print(f'mode: {args.mode}')
+    print(f'classes: {", ".join(classes)}')
     for k, v in splits.items():
         print(f'{k}: {len(v)}')
 

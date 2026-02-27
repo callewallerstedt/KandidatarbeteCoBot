@@ -94,7 +94,7 @@ class App(tk.Tk):
             '3. Go to Manual Real Data and run Prepare frames + initial masks, then Open manual mask reviewer and fix bad masks.\n'
             '4. (Optional) Go to Synthetic BG / Obstruction Data to generate more varied training data for this class.\n'
             '5. Back in Data Prep: update class list (space-separated, class-id order) and click Update dataset.yaml.\n'
-            '6. Click Build train/val/test split (mode=all recommended).\n'
+            '6. Click Build train/val/test split (mode=all recommended). Use Split class to limit to one class if needed.\n'
             '7. Train tab: use latest runs/.../best.pt to continue training and preserve old classes.\n\n'
             'B) Add MORE data to an existing class\n'
             '1. Select existing class name/id.\n'
@@ -155,7 +155,7 @@ class App(tk.Tk):
         if data_images.exists():
             names = sorted([p.name for p in data_images.iterdir() if p.is_dir()])
 
-        name_to_id, _ = self.load_dataset_class_map()
+        name_to_id, id_to_name = self.load_dataset_class_map()
         for n in sorted(name_to_id.keys()):
             if n not in names:
                 names.append(n)
@@ -163,6 +163,16 @@ class App(tk.Tk):
         if not names:
             names = ['object_name']
         self.class_choices = names
+
+        # Split selector display: ALL + "id:name"
+        split_vals = ['ALL classes']
+        if id_to_name:
+            for cid in sorted(id_to_name.keys()):
+                split_vals.append(f'{cid}:{id_to_name[cid]}')
+        else:
+            for i, n in enumerate(self.class_choices):
+                split_vals.append(f'{i}:{n}')
+        self.split_class_choices = split_vals
 
         for cb_name in ['data_class_cb', 'synth_class_cb', 'obs_class_cb', 'manual_class_cb']:
             cb = getattr(self, cb_name, None)
@@ -173,6 +183,12 @@ class App(tk.Tk):
             cb = getattr(self, cb_name, None)
             if cb is not None:
                 cb['values'] = self.class_id_choices
+
+        split_cb = getattr(self, 'split_class_cb', None)
+        if split_cb is not None:
+            split_cb['values'] = self.split_class_choices
+            if not self.split_class_var.get() or self.split_class_var.get() not in self.split_class_choices:
+                self.split_class_var.set('ALL classes')
 
     def build_data_tab(self):
         frm = self.tab_data
@@ -187,6 +203,7 @@ class App(tk.Tk):
         self.mask_quality_var = tk.StringVar(value='high')
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
+        self.split_class_var = tk.StringVar(value='ALL classes')
         self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
@@ -221,14 +238,18 @@ class App(tk.Tk):
         ttk.Label(frm, text='Split mode').grid(row=9, column=1, sticky='e')
         ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs'], state='readonly', width=10).grid(row=9, column=2, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=10, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=11, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='Split class').grid(row=10, column=0, sticky='w')
+        self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
+        self.split_class_cb.grid(row=10, column=1, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=11, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=12, column=0, pady=8, sticky='w')
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=13, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=13, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=13, column=2)
+        ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=14, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=14, column=2)
 
         frm.columnconfigure(1, weight=1)
 
@@ -566,7 +587,16 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def build_split(self):
-        self.run_cmd([str(PY), 'scripts/build_dataset_split.py', '--mode', self.split_mode_var.get()])
+        cmd = [str(PY), 'scripts/build_dataset_split.py', '--mode', self.split_mode_var.get()]
+        sel = self.split_class_var.get().strip()
+        if sel and sel != 'ALL classes':
+            if ':' in sel:
+                class_name = sel.split(':', 1)[1].strip()
+            else:
+                class_name = sel.strip()
+            if class_name:
+                cmd.extend(['--class-name', class_name])
+        self.run_cmd(cmd)
 
     def update_yaml(self):
         classes = self.classes_var.get().strip().split()
