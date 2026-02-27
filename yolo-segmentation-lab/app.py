@@ -33,6 +33,7 @@ class App(tk.Tk):
         self.tab_manual = ttk.Frame(notebook)
         self.tab_obstruction = ttk.Frame(notebook)
         self.tab_train = ttk.Frame(notebook)
+        self.tab_ddp = ttk.Frame(notebook)
         self.tab_infer = ttk.Frame(notebook)
         notebook.add(self.tab_instructions, text='0) Instructions')
         notebook.add(self.tab_data, text='1) Data Prep')
@@ -40,7 +41,8 @@ class App(tk.Tk):
         notebook.add(self.tab_obstruction, text='3) Obstruction Data')
         notebook.add(self.tab_manual, text='4) Manual Real Data')
         notebook.add(self.tab_train, text='5) Train')
-        notebook.add(self.tab_infer, text='6) Inference')
+        notebook.add(self.tab_ddp, text='6) DDP Multi-PC')
+        notebook.add(self.tab_infer, text='7) Inference')
 
         self.class_id_choices = [str(i) for i in range(0, 25)]
 
@@ -50,6 +52,7 @@ class App(tk.Tk):
         self.build_obstruction_tab()
         self.build_manual_tab()
         self.build_train_tab()
+        self.build_ddp_tab()
         self.build_infer_tab()
         self.refresh_class_options()
         self.sync_yaml_from_folders()
@@ -108,7 +111,14 @@ class App(tk.Tk):
             'D) Mask quality tips\n'
             '- If auto labels look jagged, increase Image size in Train tab (e.g. 960/1280).\n'
             '- Use Manual Real Data reviewer to clean edges on hard samples.\n'
-            '- Auto-label now supports higher-quality contour mode (less polygon simplification).\n'
+            '- Auto-label now supports higher-quality contour mode (less polygon simplification).\n\n'
+            'E) DDP Multi-PC (2+ computers)\n'
+            '1. Pull same repo commit on all PCs and ensure same dataset files.\n'
+            '2. In DDP tab, set hosts list and click Check connected.\n'
+            '3. Set master addr to rank-0 computer IP, set same port/nnodes on all PCs.\n'
+            '4. On each PC set its node rank (0,1,2...).\n'
+            '5. Click Show launch commands and run matching rank command on each PC (rank 0 first).\n'
+            '6. Use workers 0-1 on Windows for stability.\n'
         )
         txt.configure(state='disabled')
 
@@ -477,6 +487,66 @@ class App(tk.Tk):
         ttk.Button(frm, text='Start training', command=self.train).grid(row=6, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
+    def build_ddp_tab(self):
+        frm = self.tab_ddp
+        self.ddp_hosts_var = tk.StringVar(value='127.0.0.1')
+        self.ddp_master_addr_var = tk.StringVar(value='127.0.0.1')
+        self.ddp_master_port_var = tk.StringVar(value='29500')
+        self.ddp_nnodes_var = tk.StringVar(value='2')
+        self.ddp_node_rank_var = tk.StringVar(value='0')
+        self.ddp_nproc_var = tk.StringVar(value='1')
+        self.ddp_model_var = tk.StringVar(value='yolo11n-seg.pt')
+        self.ddp_epochs_var = tk.StringVar(value='50')
+        self.ddp_imgsz_var = tk.StringVar(value='960')
+        self.ddp_batch_var = tk.StringVar(value='8')
+        self.ddp_workers_var = tk.StringVar(value='0')
+        self.ddp_status_var = tk.StringVar(value='Connection status: not checked')
+
+        ttk.Label(frm, text='Computers (comma-separated host/IP)').grid(row=0, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_hosts_var, width=70).grid(row=0, column=1, sticky='we')
+        ttk.Button(frm, text='Check connected', command=self.check_ddp_connections).grid(row=0, column=2)
+
+        ttk.Label(frm, textvariable=self.ddp_status_var).grid(row=1, column=0, columnspan=3, sticky='w')
+
+        ttk.Label(frm, text='Master addr').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_master_addr_var).grid(row=2, column=1, sticky='w')
+
+        ttk.Label(frm, text='Master port').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_master_port_var).grid(row=3, column=1, sticky='w')
+
+        ttk.Label(frm, text='Total nodes (nnodes)').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_nnodes_var).grid(row=4, column=1, sticky='w')
+
+        ttk.Label(frm, text='This node rank (0..nnodes-1)').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_node_rank_var).grid(row=5, column=1, sticky='w')
+
+        ttk.Label(frm, text='GPUs on this node (nproc_per_node)').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_nproc_var).grid(row=6, column=1, sticky='w')
+
+        ttk.Separator(frm, orient='horizontal').grid(row=7, column=0, columnspan=3, sticky='we', pady=6)
+
+        ttk.Label(frm, text='Model/weights').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_model_var).grid(row=8, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_ddp_model).grid(row=8, column=2)
+
+        ttk.Label(frm, text='Epochs').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_epochs_var).grid(row=9, column=1, sticky='w')
+
+        ttk.Label(frm, text='Image size').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_imgsz_var).grid(row=10, column=1, sticky='w')
+
+        ttk.Label(frm, text='Batch (per process)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_batch_var).grid(row=11, column=1, sticky='w')
+
+        ttk.Label(frm, text='Workers (recommend 0-1 on Windows)').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_workers_var).grid(row=12, column=1, sticky='w')
+
+        ttk.Button(frm, text='Show launch commands (all nodes)', command=self.show_ddp_commands).grid(row=13, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Start DDP on THIS node', command=self.start_ddp_local).grid(row=13, column=1, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Use same repo/data on all PCs. Run rank 0 on master first, then other ranks.').grid(row=14, column=0, columnspan=3, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
     def build_infer_tab(self):
         frm = self.tab_infer
         self.weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
@@ -538,6 +608,73 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select model/weights for training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
             self.model_var.set(p)
+
+    def pick_ddp_model(self):
+        p = filedialog.askopenfilename(title='Select model/weights for DDP training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
+        if p:
+            self.ddp_model_var.set(p)
+
+    def _parse_ddp_hosts(self):
+        raw = self.ddp_hosts_var.get().strip()
+        if not raw:
+            return []
+        return [h.strip() for h in raw.split(',') if h.strip()]
+
+    def check_ddp_connections(self):
+        hosts = self._parse_ddp_hosts()
+        if not hosts:
+            self.ddp_status_var.set('Connection status: no hosts listed')
+            self.log_line('DDP: no hosts listed to check.')
+            return
+
+        ok = 0
+        for h in hosts:
+            if os.name == 'nt':
+                cmd = ['ping', '-n', '1', '-w', '1200', h]
+            else:
+                cmd = ['ping', '-c', '1', '-W', '1', h]
+            try:
+                rc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+                if rc == 0:
+                    ok += 1
+                    self.log_line(f'DDP host reachable: {h}')
+                else:
+                    self.log_line(f'DDP host NOT reachable: {h}')
+            except Exception as e:
+                self.log_line(f'DDP host check error for {h}: {e}')
+
+        self.ddp_status_var.set(f'Connection status: {ok}/{len(hosts)} reachable')
+
+    def _ddp_launch_cmd(self, rank):
+        return [
+            str(PY), '-m', 'torch.distributed.run',
+            '--nnodes', self.ddp_nnodes_var.get(),
+            '--nproc_per_node', self.ddp_nproc_var.get(),
+            '--node_rank', str(rank),
+            '--master_addr', self.ddp_master_addr_var.get(),
+            '--master_port', self.ddp_master_port_var.get(),
+            'scripts/train_yolo_seg_ddp.py',
+            '--model', self.ddp_model_var.get(),
+            '--epochs', self.ddp_epochs_var.get(),
+            '--imgsz', self.ddp_imgsz_var.get(),
+            '--batch', self.ddp_batch_var.get(),
+            '--workers', self.ddp_workers_var.get(),
+        ]
+
+    def show_ddp_commands(self):
+        try:
+            nnodes = int(self.ddp_nnodes_var.get())
+        except Exception:
+            self.log_line('DDP: invalid nnodes value.')
+            return
+        self.log_line('DDP launch commands (run on each corresponding node):')
+        for r in range(max(1, nnodes)):
+            cmd = self._ddp_launch_cmd(r)
+            self.log_line(f'RANK {r}: ' + ' '.join(map(str, cmd)))
+
+    def start_ddp_local(self):
+        cmd = self._ddp_launch_cmd(self.ddp_node_rank_var.get())
+        self.run_cmd(cmd)
 
     def pick_save_video(self):
         p = filedialog.asksaveasfilename(title='Save overlay video as', defaultextension='.mp4', filetypes=[('MP4 video', '*.mp4'), ('All files', '*.*')])

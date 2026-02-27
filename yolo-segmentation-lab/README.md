@@ -34,7 +34,15 @@ py -3.11 -m venv .venv
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with live 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training
+- DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
 - Inference
+
+## DDP Multi-PC notes
+- Use same commit + same dataset on all nodes.
+- In DDP tab, set identical `master addr`, `master port`, and `nnodes` on all computers.
+- Set `node rank` uniquely per PC (0..nnodes-1).
+- Start rank 0 first, then rank 1/2/...
+- Script used by DDP launcher: `scripts/train_yolo_seg_ddp.py`
 
 ## Incremental multiclass workflow
 - You can add one object class at a time.
