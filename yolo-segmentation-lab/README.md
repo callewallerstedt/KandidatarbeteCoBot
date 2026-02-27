@@ -36,7 +36,7 @@ py -3.11 -m venv .venv
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training (with configurable dataloader workers; on Windows use workers=0 for stability)
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
-- Inference (including explicit webcam capture resolution controls, higher default 1920x1080 display, polygon-based high-quality mask overlay, per-instance colors, and instance count logging)
+- Inference (including explicit webcam capture resolution controls, higher default 1920x1080 display, polygon-based high-quality mask overlay, per-instance colors, and instance count logging). Default inference imgsz is set to 960 for better edge quality.
 
 ## Synthetic run folders
 - Synthetic generation now keeps the selected background image proportions (no forced crop to source image aspect ratio).

@@ -29,7 +29,7 @@ def mask_from_poly(poly, w, h):
     return m
 
 
-def mask_to_polygon(mask, eps=0.002):
+def mask_to_polygon(mask, eps=0.0012):
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None

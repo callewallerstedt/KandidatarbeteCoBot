@@ -549,7 +549,7 @@ class App(tk.Tk):
         self.manual_init_source_var = tk.StringVar(value='yolo')
         self.manual_init_weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
         self.manual_init_conf_var = tk.StringVar(value='0.20')
-        self.manual_init_imgsz_var = tk.StringVar(value='640')
+        self.manual_init_imgsz_var = tk.StringVar(value='960')
         self.manual_init_device_var = tk.StringVar(value='0')
         self.manual_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var))
 
@@ -597,8 +597,8 @@ class App(tk.Tk):
         frm = self.tab_train
         self.model_var = tk.StringVar(value='yolo11n-seg.pt')
         self.epochs_var = tk.StringVar(value='80')
-        self.imgsz_var = tk.StringVar(value='640')
-        self.batch_var = tk.StringVar(value='16')
+        self.imgsz_var = tk.StringVar(value='960')
+        self.batch_var = tk.StringVar(value='8')
         self.device_var = tk.StringVar(value='0')
         self.workers_var = tk.StringVar(value='0')
 
@@ -689,7 +689,7 @@ class App(tk.Tk):
         frm = self.tab_infer
         self.weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
         self.source_var = tk.StringVar(value='0')
-        self.infer_imgsz_var = tk.StringVar(value='640')
+        self.infer_imgsz_var = tk.StringVar(value='960')
         self.infer_conf_var = tk.StringVar(value='0.25')
         self.infer_device_var = tk.StringVar(value='0')
         self.view_w_var = tk.StringVar(value='1920')

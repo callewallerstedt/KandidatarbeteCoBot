@@ -28,7 +28,7 @@ def poly_to_mask(poly: np.ndarray, w: int, h: int):
     return m
 
 
-def mask_to_polygon(mask, eps=0.003):
+def mask_to_polygon(mask, eps=0.0015):
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None
