@@ -27,7 +27,7 @@ def write_yolo(label_path: Path, class_id: int, poly, w, h):
     label_path.write_text(' '.join(vals) + '\n', encoding='utf-8')
 
 
-def foreground_mask(frame_bgr):
+def foreground_mask_rembg(frame_bgr):
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     out = remove(rgb)
     if out.shape[2] == 4:
@@ -42,6 +42,27 @@ def foreground_mask(frame_bgr):
     return mask
 
 
+def foreground_mask_yolo(frame_bgr, model, class_id, conf=0.20):
+    r = model.predict(frame_bgr, conf=conf, verbose=False)[0]
+    if r.masks is None or r.boxes is None or len(r.boxes) == 0:
+        return None
+
+    cls = r.boxes.cls.cpu().numpy().astype(int)
+    scores = r.boxes.conf.cpu().numpy()
+    masks = r.masks.data.cpu().numpy()  # N x H x W
+
+    idxs = np.where(cls == int(class_id))[0]
+    if len(idxs) == 0:
+        idxs = np.arange(len(cls))
+
+    best = idxs[int(np.argmax(scores[idxs]))]
+    m = (masks[best] > 0.5).astype(np.uint8) * 255
+    kernel = np.ones((3, 3), np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel)
+    return m
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--video', required=True)
@@ -50,6 +71,9 @@ def main():
     ap.add_argument('--num-samples', type=int, default=80)
     ap.add_argument('--data-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
     ap.add_argument('--prefix', default='manual')
+    ap.add_argument('--init-source', choices=['rembg', 'yolo'], default='yolo')
+    ap.add_argument('--weights', default=str(Path(__file__).resolve().parents[1] / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
+    ap.add_argument('--init-conf', type=float, default=0.20)
     args = ap.parse_args()
 
     root = Path(args.data_root)
@@ -59,6 +83,17 @@ def main():
     img_dir.mkdir(parents=True, exist_ok=True)
     lbl_dir.mkdir(parents=True, exist_ok=True)
     viz_dir.mkdir(parents=True, exist_ok=True)
+
+    yolo_model = None
+    if args.init_source == 'yolo':
+        from ultralytics import YOLO
+        wp = Path(args.weights)
+        if not wp.exists():
+            raise RuntimeError(f'YOLO init weights not found: {wp}')
+        yolo_model = YOLO(str(wp))
+        print(f'Using YOLO initial masks from: {wp}')
+    else:
+        print('Using rembg initial masks.')
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -81,7 +116,14 @@ def main():
             idx += 1
             continue
 
-        mask = foreground_mask(frame)
+        if args.init_source == 'yolo':
+            mask = foreground_mask_yolo(frame, yolo_model, class_id=args.class_id, conf=args.init_conf)
+            if mask is None:
+                idx += 1
+                continue
+        else:
+            mask = foreground_mask_rembg(frame)
+
         poly = mask_to_polygon(mask)
         if poly is None:
             idx += 1

@@ -46,6 +46,8 @@ py -3.11 -m venv .venv
 - Synthetic BG tab includes brightness min/max controls.
 
 ## Manual reviewer usability
+- Manual prep can use YOLO weights for better initial masks (`source=yolo`) or rembg fallback.
+- You can choose init weights and confidence from the GUI manual tab.
 - Drawing is smoother (line interpolation instead of sparse dots).
 - Zoom controls added (`z` in, `x` out).
 

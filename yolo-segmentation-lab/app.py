@@ -453,6 +453,9 @@ class App(tk.Tk):
         self.manual_class_id_var = tk.StringVar(value='0')
         self.manual_samples_var = tk.StringVar(value='80')
         self.manual_prefix_var = tk.StringVar(value='manual')
+        self.manual_init_source_var = tk.StringVar(value='yolo')
+        self.manual_init_weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
+        self.manual_init_conf_var = tk.StringVar(value='0.20')
         self.manual_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
@@ -473,10 +476,20 @@ class App(tk.Tk):
         ttk.Label(frm, text='Filename prefix').grid(row=4, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.manual_prefix_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=5, column=0, pady=8)
-        ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=5, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Initial mask source').grid(row=5, column=0, sticky='w')
+        ttk.Combobox(frm, textvariable=self.manual_init_source_var, values=['yolo', 'rembg'], state='readonly', width=10).grid(row=5, column=1, sticky='w')
 
-        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=6, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Init weights (used when source=yolo)').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_init_weights_var, width=70).grid(row=6, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_manual_weights).grid(row=6, column=2)
+
+        ttk.Label(frm, text='Init conf').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_init_conf_var, width=10).grid(row=7, column=1, sticky='w')
+
+        ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=8, column=0, pady=8)
+        ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=8, column=1, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=9, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_train_tab(self):
@@ -712,6 +725,11 @@ class App(tk.Tk):
         if p:
             self.manual_video_var.set(p)
 
+    def pick_manual_weights(self):
+        p = filedialog.askopenfilename(title='Select init weights for manual prep', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
+        if p:
+            self.manual_init_weights_var.set(p)
+
     def pick_obs_dir(self):
         p = filedialog.askdirectory(title='Select obstruction folder')
         if p:
@@ -774,7 +792,11 @@ class App(tk.Tk):
             '--class-id', self.manual_class_id_var.get(),
             '--num-samples', self.manual_samples_var.get(),
             '--prefix', self.manual_prefix_var.get(),
+            '--init-source', self.manual_init_source_var.get(),
+            '--init-conf', self.manual_init_conf_var.get(),
         ]
+        if self.manual_init_source_var.get() == 'yolo' and self.manual_init_weights_var.get().strip():
+            cmd.extend(['--weights', self.manual_init_weights_var.get().strip()])
         self.run_cmd(cmd)
 
     def _obstruction_cmd_base(self):
