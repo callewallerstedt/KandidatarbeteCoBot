@@ -281,6 +281,7 @@ class App(tk.Tk):
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
         self.split_class_var = tk.StringVar(value='ALL classes')
+        self.split_run_var = tk.StringVar(value='')
         self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
@@ -319,15 +320,18 @@ class App(tk.Tk):
         self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
         self.split_class_cb.grid(row=10, column=1, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=11, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=12, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='Run filter (optional, e.g. run_20260227_120000)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=34).grid(row=11, column=1, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only synth_runs | obs = only obs_runs').grid(row=12, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=13, column=0, pady=8, sticky='w')
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=14, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=14, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=14, column=2)
-        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=15, column=0, pady=6, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=14, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=15, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=15, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=15, column=2)
+        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=16, column=0, pady=6, sticky='w')
 
         frm.columnconfigure(1, weight=1)
 
@@ -340,6 +344,9 @@ class App(tk.Tk):
         self.synth_min_scale_var = tk.StringVar(value='0.55')
         self.synth_max_scale_var = tk.StringVar(value='1.25')
         self.synth_rot_var = tk.StringVar(value='25')
+        self.synth_bri_min_var = tk.StringVar(value='-20')
+        self.synth_bri_max_var = tk.StringVar(value='20')
+        self.synth_run_var = tk.StringVar(value='')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -366,7 +373,16 @@ class App(tk.Tk):
         ttk.Label(frm, text='Max rotation deg').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_rot_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=7, column=0, pady=8)
+        ttk.Label(frm, text='Brightness min (beta)').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_bri_min_var).grid(row=7, column=1, sticky='we')
+
+        ttk.Label(frm, text='Brightness max (beta)').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_bri_max_var).grid(row=8, column=1, sticky='we')
+
+        ttk.Label(frm, text='Synth run name (optional)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=9, column=1, sticky='we')
+
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=10, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -382,6 +398,7 @@ class App(tk.Tk):
         self.obs_overlap_var = tk.StringVar(value='0.8')
         self.obs_scale_var = tk.StringVar(value='0.8')
         self.obs_white_prob_var = tk.StringVar(value='0.10')
+        self.obs_run_var = tk.StringVar(value='')
         self.obs_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -421,9 +438,12 @@ class App(tk.Tk):
         ttk.Label(frm, text='Keep original white-table background probability (e.g. 0.10)').grid(row=10, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_white_prob_var).grid(row=10, column=1, sticky='we')
 
-        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=11, column=0, pady=8)
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=11, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=12, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Obstruction run name (optional)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_run_var).grid(row=11, column=1, sticky='we')
+
+        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=12, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=12, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=13, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -456,7 +476,7 @@ class App(tk.Tk):
         ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=5, column=0, pady=8)
         ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=5, column=1, pady=8, sticky='w')
 
-        ttk.Label(frm, text='Reviewer hotkeys: mouse draw | a add | e erase | s save | n/p next/prev | +/- brush | q quit').grid(row=6, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=6, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_train_tab(self):
@@ -734,7 +754,11 @@ class App(tk.Tk):
             '--min-scale', self.synth_min_scale_var.get(),
             '--max-scale', self.synth_max_scale_var.get(),
             '--max-rotation', self.synth_rot_var.get(),
+            '--brightness-min', self.synth_bri_min_var.get(),
+            '--brightness-max', self.synth_bri_max_var.get(),
         ]
+        if self.synth_run_var.get().strip():
+            cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         self.run_cmd(cmd)
 
     def prepare_manual(self):
@@ -766,7 +790,7 @@ class App(tk.Tk):
             '--rotation-deviation', self.obs_rot_dev_var.get(),
             '--overlap-level', self.obs_overlap_var.get(),
             '--obstruction-scale', self.obs_scale_var.get(),
-        ]
+        ] + (['--run-name', self.obs_run_var.get().strip()] if self.obs_run_var.get().strip() else [])
 
     def preview_obstruction(self):
         if not self.ensure_class_registered(self.obs_class_var.get(), self.obs_class_id_var.get()):
@@ -811,6 +835,9 @@ class App(tk.Tk):
                 class_name = sel.strip()
             if class_name:
                 cmd.extend(['--class-name', class_name])
+        run_filter = self.split_run_var.get().strip()
+        if run_filter:
+            cmd.extend(['--run-name', run_filter])
         self.run_cmd(cmd)
 
     def update_yaml(self):

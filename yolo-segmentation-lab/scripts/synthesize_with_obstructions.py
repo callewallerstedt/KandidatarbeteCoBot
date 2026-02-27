@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import random
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -137,6 +138,7 @@ def main():
     ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Relative to object bbox height')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
+    ap.add_argument('--run-name', default='', help='Obstruction run folder name (default timestamp)')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -146,9 +148,10 @@ def main():
     root = Path(args.data_root)
     src_img_dir = root / 'images' / args.class_name
     src_lbl_dir = root / 'labels' / args.class_name
-    out_img_dir = root / 'images' / args.class_name
-    out_lbl_dir = root / 'labels' / args.class_name
-    out_viz_dir = root / 'staging' / f'{args.class_name}_obstruction'
+    run_name = args.run_name.strip() or datetime.now().strftime('run_%Y%m%d_%H%M%S')
+    out_img_dir = root / 'images' / args.class_name / 'obs_runs' / run_name
+    out_lbl_dir = root / 'labels' / args.class_name / 'obs_runs' / run_name
+    out_viz_dir = root / 'staging' / f'{args.class_name}_obstruction' / run_name
 
     out_img_dir.mkdir(parents=True, exist_ok=True)
     out_lbl_dir.mkdir(parents=True, exist_ok=True)

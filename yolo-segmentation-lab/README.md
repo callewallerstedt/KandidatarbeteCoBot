@@ -26,7 +26,7 @@ py -3.11 -m venv .venv
 ## Main app
 `app.py` has tabs for:
 - Instructions (step-by-step guide for adding classes, adding more data, and safe retraining)
-- Data prep (auto-label from video + split mode: all/real/synth/obs + mask quality selector + optional split-class selector)
+- Data prep (auto-label from video + split mode: all/real/synth/obs + mask quality selector + optional split-class selector + optional run filter)
 - Class IDs are auto-suggested from `dataset.yaml` (reuse existing ID for known class, otherwise pick next free ID)
 - When generating labels/data from the GUI, the class is auto-registered into `dataset.yaml` (no manual class-list edit required)
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time
@@ -36,6 +36,18 @@ py -3.11 -m venv .venv
 - Training
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
 - Inference
+
+## Synthetic run folders
+- New synthetic and obstruction generations are stored in per-run folders:
+  - `data/images/<class>/synth_runs/<run_name>/`
+  - `data/images/<class>/obs_runs/<run_name>/`
+  - matching label folders under `data/labels/...`
+- Build split can filter to a specific run via run filter.
+- Synthetic BG tab includes brightness min/max controls.
+
+## Manual reviewer usability
+- Drawing is smoother (line interpolation instead of sparse dots).
+- Zoom controls added (`z` in, `x` out).
 
 ## DDP Multi-PC notes
 - Use same commit + same dataset on all nodes.

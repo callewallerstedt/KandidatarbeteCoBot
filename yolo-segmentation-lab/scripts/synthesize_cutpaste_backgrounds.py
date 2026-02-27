@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import random
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -89,6 +90,9 @@ def main():
     ap.add_argument('--min-scale', type=float, default=0.55)
     ap.add_argument('--max-scale', type=float, default=1.25)
     ap.add_argument('--max-rotation', type=float, default=25.0)
+    ap.add_argument('--brightness-min', type=float, default=-20.0, help='Min brightness shift (beta)')
+    ap.add_argument('--brightness-max', type=float, default=20.0, help='Max brightness shift (beta)')
+    ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -98,9 +102,10 @@ def main():
     root = Path(args.data_root)
     src_img_dir = root / 'images' / args.class_name
     src_lbl_dir = root / 'labels' / args.class_name
-    out_img_dir = root / 'images' / args.class_name
-    out_lbl_dir = root / 'labels' / args.class_name
-    out_viz_dir = root / 'staging' / f'{args.class_name}_synth'
+    run_name = args.run_name.strip() or datetime.now().strftime('run_%Y%m%d_%H%M%S')
+    out_img_dir = root / 'images' / args.class_name / 'synth_runs' / run_name
+    out_lbl_dir = root / 'labels' / args.class_name / 'synth_runs' / run_name
+    out_viz_dir = root / 'staging' / f'{args.class_name}_synth' / run_name
 
     out_img_dir.mkdir(parents=True, exist_ok=True)
     out_lbl_dir.mkdir(parents=True, exist_ok=True)
@@ -112,10 +117,15 @@ def main():
         raise RuntimeError(f'No background images found in {bg_dir}')
 
     pairs = []
-    for im in sorted(src_img_dir.glob('*')):
+    for im in sorted(src_img_dir.rglob('*')):
         if im.suffix.lower() not in IMG_EXTS:
             continue
-        lb = src_lbl_dir / f'{im.stem}.txt'
+        rel_parts = set(im.relative_to(src_img_dir).parts)
+        if 'synth_runs' in rel_parts or 'obs_runs' in rel_parts:
+            continue
+        if any(tag in im.stem for tag in ['_synth_', '_obs_']):
+            continue
+        lb = (src_lbl_dir / im.relative_to(src_img_dir)).with_suffix('.txt')
         if lb.exists():
             pairs.append((im, lb))
     if not pairs:
@@ -168,6 +178,9 @@ def main():
         roi[alpha] = crop_rr[alpha]
         bg[py:py + oh, px:px + ow] = roi
 
+        beta = random.uniform(args.brightness_min, args.brightness_max)
+        bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=beta)
+
         full_mask = np.zeros((h, w), dtype=np.uint8)
         full_mask[py:py + oh, px:px + ow] = m_rr
         poly_new = mask_to_polygon(full_mask)
@@ -188,6 +201,7 @@ def main():
         made += 1
 
     print(f'Synthetic created: {made}')
+    print(f'Run name: {run_name}')
     print(f'Images dir: {out_img_dir}')
     print(f'Labels dir: {out_lbl_dir}')
     print(f'Overlays dir: {out_viz_dir}')

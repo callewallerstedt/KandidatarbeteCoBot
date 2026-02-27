@@ -17,6 +17,7 @@ def main():
     ap.add_argument('--mode', choices=['all', 'real', 'synth', 'obs'], default='all',
                     help='all: all pairs, real: exclude *_synth_* and *_obs_*, synth: only *_synth_*, obs: only *_obs_*')
     ap.add_argument('--class-name', default='', help='Optional single class folder name to include (e.g. bottle). Empty = all classes')
+    ap.add_argument('--run-name', default='', help='Optional run folder filter (e.g. run_20260227_120000)')
     args = ap.parse_args()
 
     if round(args.train + args.val + args.test, 6) != 1.0:
@@ -38,24 +39,32 @@ def main():
             raise RuntimeError(f'class-name not found in data/images: {wanted}')
         classes = [wanted]
 
+    run_filter = args.run_name.strip()
+
     for cls in classes:
-        for im in sorted((images_root / cls).iterdir()):
+        cls_img_root = images_root / cls
+        cls_lbl_root = labels_root / cls
+        for im in sorted(cls_img_root.rglob('*')):
             if im.suffix.lower() not in IMG_EXTS:
                 continue
 
+            rel = im.relative_to(cls_img_root)
+            rel_str = rel.as_posix()
             stem = im.stem
-            is_synth = '_synth_' in stem
-            is_obs = '_obs_' in stem
+            is_synth = ('_synth_' in stem) or ('synth_runs' in rel.parts)
+            is_obs = ('_obs_' in stem) or ('obs_runs' in rel.parts)
             if args.mode == 'real' and (is_synth or is_obs):
                 continue
             if args.mode == 'synth' and not is_synth:
                 continue
             if args.mode == 'obs' and not is_obs:
                 continue
+            if run_filter and run_filter not in rel_str:
+                continue
 
-            lb = labels_root / cls / f'{im.stem}.txt'
+            lb = (cls_lbl_root / rel).with_suffix('.txt')
             if lb.exists():
-                all_pairs.append((im, lb))
+                all_pairs.append((cls, rel, im, lb))
 
     if not all_pairs:
         raise RuntimeError('No image-label pairs found.')
@@ -79,9 +88,12 @@ def main():
     for split, items in splits.items():
         (dst / 'images' / split).mkdir(parents=True, exist_ok=True)
         (dst / 'labels' / split).mkdir(parents=True, exist_ok=True)
-        for im, lb in items:
-            shutil.copy2(im, dst / 'images' / split / im.name)
-            shutil.copy2(lb, dst / 'labels' / split / lb.name)
+        for cls, rel, im, lb in items:
+            rel_base = rel.with_suffix('').as_posix().replace('/', '__')
+            out_name = f'{cls}__{rel_base}{im.suffix.lower()}'
+            out_label = f'{cls}__{rel_base}.txt'
+            shutil.copy2(im, dst / 'images' / split / out_name)
+            shutil.copy2(lb, dst / 'labels' / split / out_label)
 
     print(f'Dataset built at: {dst}')
     print(f'mode: {args.mode}')
