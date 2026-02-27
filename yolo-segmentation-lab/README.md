@@ -30,7 +30,7 @@ py -3.11 -m venv .venv
 - Class IDs are auto-suggested from `dataset.yaml` (reuse existing ID for known class, otherwise pick next free ID)
 - When generating labels/data from the GUI, the class is auto-registered into `dataset.yaml` (no manual class-list edit required)
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time
-- Synthetic BG (cut-paste augmentation from your background folder)
+- Synthetic BG (cut-paste augmentation from your background folder, with min/max preview for scale/brightness)
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with live 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training

@@ -382,7 +382,8 @@ class App(tk.Tk):
         ttk.Label(frm, text='Synth run name (optional)').grid(row=9, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=9, column=1, sticky='we')
 
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=10, column=0, pady=8)
+        ttk.Button(frm, text='Preview synth settings (min/max)', command=self.preview_synth).grid(row=10, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=10, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -765,12 +766,7 @@ class App(tk.Tk):
         self.run_cmd(cmd)
         self.after(1000, self.refresh_class_options)
 
-    def generate_synth(self):
-        if not self.ensure_class_registered(self.synth_class_var.get(), self.synth_class_id_var.get()):
-            return
-        if not self.bg_dir_var.get().strip():
-            self.log_line('Please select a background folder first.')
-            return
+    def _synth_cmd_base(self):
         cmd = [
             str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
             '--class-name', self.synth_class_var.get(),
@@ -785,7 +781,24 @@ class App(tk.Tk):
         ]
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])
+        return cmd
+
+    def preview_synth(self):
+        if not self.ensure_class_registered(self.synth_class_var.get(), self.synth_class_id_var.get()):
+            return
+        if not self.bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first.')
+            return
+        cmd = self._synth_cmd_base() + ['--preview-only', '--preview-window']
         self.run_cmd(cmd)
+
+    def generate_synth(self):
+        if not self.ensure_class_registered(self.synth_class_var.get(), self.synth_class_id_var.get()):
+            return
+        if not self.bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first.')
+            return
+        self.run_cmd(self._synth_cmd_base())
 
     def prepare_manual(self):
         if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):

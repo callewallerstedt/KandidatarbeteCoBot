@@ -80,6 +80,72 @@ def rotate_bound_pair(img, mask, angle):
     return rot_img, rot_mask
 
 
+def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_beta=None):
+    im_path, lb_path = random.choice(pairs)
+    src = cv2.imread(str(im_path))
+    if src is None:
+        return None
+    h, w = src.shape[:2]
+    cls_id, poly = load_yolo_polygon(lb_path, w, h)
+    if poly is None:
+        return None
+
+    mask = poly_to_mask(poly, w, h)
+    x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
+    crop = src[y:y + bh, x:x + bw]
+    crop_mask = mask[y:y + bh, x:x + bw]
+
+    bg = pick_random_background(bg_files, w, h)
+
+    scale = fixed_scale if fixed_scale is not None else random.uniform(args.min_scale, args.max_scale)
+    angle = random.uniform(-args.max_rotation, args.max_rotation)
+    tw = max(8, int(bw * scale))
+    th = max(8, int(bh * scale))
+
+    crop_r = cv2.resize(crop, (tw, th), interpolation=cv2.INTER_LINEAR)
+    m_r = cv2.resize(crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+
+    crop_rr, m_rr = rotate_bound_pair(crop_r, m_r, angle)
+
+    ys, xs = np.where(m_rr > 0)
+    if len(xs) < 20:
+        return None
+    x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
+    crop_rr = crop_rr[y1:y2 + 1, x1:x2 + 1]
+    m_rr = m_rr[y1:y2 + 1, x1:x2 + 1]
+    oh, ow = m_rr.shape[:2]
+
+    if ow >= w or oh >= h:
+        return None
+
+    px = random.randint(0, w - ow)
+    py = random.randint(0, h - oh)
+
+    roi = bg[py:py + oh, px:px + ow]
+    alpha = (m_rr > 0)
+    roi[alpha] = crop_rr[alpha]
+    bg[py:py + oh, px:px + ow] = roi
+
+    beta = fixed_beta if fixed_beta is not None else random.uniform(args.brightness_min, args.brightness_max)
+    bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=beta)
+
+    full_mask = np.zeros((h, w), dtype=np.uint8)
+    full_mask[py:py + oh, px:px + ow] = m_rr
+    poly_new = mask_to_polygon(full_mask)
+    if poly_new is None:
+        return None
+
+    return {
+        'image': bg,
+        'poly': poly_new,
+        'w': w,
+        'h': h,
+        'cls_id': args.class_id if cls_id is None else cls_id,
+        'scale': scale,
+        'beta': beta,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
@@ -93,6 +159,8 @@ def main():
     ap.add_argument('--brightness-min', type=float, default=-20.0, help='Min brightness shift (beta)')
     ap.add_argument('--brightness-max', type=float, default=20.0, help='Max brightness shift (beta)')
     ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
+    ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
+    ap.add_argument('--preview-window', action='store_true', help='Show preview window')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -102,6 +170,7 @@ def main():
     root = Path(args.data_root)
     src_img_dir = root / 'images' / args.class_name
     src_lbl_dir = root / 'labels' / args.class_name
+
     run_name = args.run_name.strip() or datetime.now().strftime('run_%Y%m%d_%H%M%S')
     out_img_dir = root / 'images' / args.class_name / 'synth_runs' / run_name
     out_lbl_dir = root / 'labels' / args.class_name / 'synth_runs' / run_name
@@ -131,60 +200,61 @@ def main():
     if not pairs:
         raise RuntimeError(f'No source image-label pairs found for class={args.class_name}')
 
+    if args.preview_only:
+        combos = [
+            (args.min_scale, args.brightness_min, 'min-scale min-bright'),
+            (args.max_scale, args.brightness_min, 'max-scale min-bright'),
+            (args.min_scale, args.brightness_max, 'min-scale max-bright'),
+            (args.max_scale, args.brightness_max, 'max-scale max-bright'),
+        ]
+        previews = []
+        for sc, br, label in combos:
+            sample = None
+            for _ in range(20):
+                sample = compose_once(pairs, bg_files, args, fixed_scale=sc, fixed_beta=br)
+                if sample is not None:
+                    break
+            if sample is None:
+                continue
+            vis = sample['image'].copy()
+            cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+            cv2.putText(vis, f'{label} | scale={sc:.2f}, beta={br:.1f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+            previews.append(vis)
+
+        if not previews:
+            raise RuntimeError('Could not create preview samples with current settings.')
+
+        # 2x2 grid
+        while len(previews) < 4:
+            previews.append(previews[-1])
+        h, w = previews[0].shape[:2]
+        previews = [cv2.resize(p, (w, h)) for p in previews]
+        top = np.hstack([previews[0], previews[1]])
+        bot = np.hstack([previews[2], previews[3]])
+        grid = np.vstack([top, bot])
+
+        out_prev = out_viz_dir / 'synth_settings_preview.jpg'
+        cv2.imwrite(str(out_prev), grid)
+        print(f'Preview saved: {out_prev}')
+        if args.preview_window:
+            cv2.namedWindow('Synth Preview (q/esc close)', cv2.WINDOW_NORMAL)
+            cv2.imshow('Synth Preview (q/esc close)', grid)
+            while True:
+                k = cv2.waitKey(20) & 0xFF
+                if k in (ord('q'), 27):
+                    break
+            cv2.destroyAllWindows()
+        print('Preview-only mode: no training images/labels written.')
+        return
+
     made = 0
     for i in range(args.num_synthetic):
-        im_path, lb_path = random.choice(pairs)
-        src = cv2.imread(str(im_path))
-        if src is None:
-            continue
-        h, w = src.shape[:2]
-        cls_id, poly = load_yolo_polygon(lb_path, w, h)
-        if poly is None:
-            continue
-
-        mask = poly_to_mask(poly, w, h)
-        x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
-        crop = src[y:y + bh, x:x + bw]
-        crop_mask = mask[y:y + bh, x:x + bw]
-
-        bg = pick_random_background(bg_files, w, h)
-
-        scale = random.uniform(args.min_scale, args.max_scale)
-        angle = random.uniform(-args.max_rotation, args.max_rotation)
-        tw = max(8, int(bw * scale))
-        th = max(8, int(bh * scale))
-
-        crop_r = cv2.resize(crop, (tw, th), interpolation=cv2.INTER_LINEAR)
-        m_r = cv2.resize(crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
-
-        crop_rr, m_rr = rotate_bound_pair(crop_r, m_r, angle)
-
-        ys, xs = np.where(m_rr > 0)
-        if len(xs) < 20:
-            continue
-        x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
-        crop_rr = crop_rr[y1:y2 + 1, x1:x2 + 1]
-        m_rr = m_rr[y1:y2 + 1, x1:x2 + 1]
-        oh, ow = m_rr.shape[:2]
-
-        if ow >= w or oh >= h:
-            continue
-
-        px = random.randint(0, w - ow)
-        py = random.randint(0, h - oh)
-
-        roi = bg[py:py + oh, px:px + ow]
-        alpha = (m_rr > 0)
-        roi[alpha] = crop_rr[alpha]
-        bg[py:py + oh, px:px + ow] = roi
-
-        beta = random.uniform(args.brightness_min, args.brightness_max)
-        bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=beta)
-
-        full_mask = np.zeros((h, w), dtype=np.uint8)
-        full_mask[py:py + oh, px:px + ow] = m_rr
-        poly_new = mask_to_polygon(full_mask)
-        if poly_new is None:
+        sample = None
+        for _ in range(20):
+            sample = compose_once(pairs, bg_files, args)
+            if sample is not None:
+                break
+        if sample is None:
             continue
 
         stem = f'{args.class_name}_synth_{i + 1:06d}'
@@ -192,11 +262,11 @@ def main():
         out_lbl = out_lbl_dir / f'{stem}.txt'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
-        cv2.imwrite(str(out_img), bg)
-        write_yolo(out_lbl, args.class_id if cls_id is None else cls_id, poly_new, w, h)
+        cv2.imwrite(str(out_img), sample['image'])
+        write_yolo(out_lbl, sample['cls_id'], sample['poly'], sample['w'], sample['h'])
 
-        ov = bg.copy()
-        cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+        ov = sample['image'].copy()
+        cv2.drawContours(ov, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
         cv2.imwrite(str(out_viz), ov)
         made += 1
 
