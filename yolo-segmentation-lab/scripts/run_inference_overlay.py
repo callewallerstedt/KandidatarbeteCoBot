@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 from datetime import datetime
+import numpy as np
 from ultralytics import YOLO
 import cv2
 
@@ -26,6 +27,7 @@ def main():
     ap.add_argument('--human-model', default='yolo11n-pose.pt', help='Pose model for human joint tracking')
     ap.add_argument('--human-conf', type=float, default=0.20)
     ap.add_argument('--human-alpha', type=float, default=0.30, help='Opacity for thick arm corridor')
+    ap.add_argument('--mask-smooth', type=int, default=2, help='Mask smoothing strength (0=off, higher=smoother)')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
@@ -48,6 +50,21 @@ def main():
         (90, 255, 255),
     ]
 
+    def smooth_polygon(poly, smooth_strength):
+        if smooth_strength <= 0 or poly is None or len(poly) < 5:
+            return poly
+        pts = poly.astype('float32').reshape(-1, 1, 2)
+        # upscale then smooth contour for less blocky edges
+        factor = max(1, int(smooth_strength))
+        up = cv2.resize(pts, (1, len(pts) * factor), interpolation=cv2.INTER_CUBIC)
+        up = up.reshape(-1, 2)
+        # moving average smoothing
+        k = min(11, max(3, 2 * factor + 1))
+        pad = k // 2
+        ext = np.vstack([up[-pad:], up, up[:pad]])
+        sm = np.array([ext[i:i + k].mean(axis=0) for i in range(len(up))], dtype=np.float32)
+        return sm
+
     def render_result(r):
         if getattr(r, 'orig_img', None) is None:
             frame = r.plot()
@@ -60,17 +77,21 @@ def main():
         if r.masks is not None and getattr(r.masks, 'xy', None) is not None:
             polys = r.masks.xy
             count = len(polys)
+            smoothed_polys = []
             for i, poly in enumerate(polys):
                 color = palette[i % len(palette)]
                 if poly is None or len(poly) < 3:
+                    smoothed_polys.append(None)
                     continue
-                pts = poly.astype('int32').reshape(-1, 1, 2)
+                sp = smooth_polygon(poly, args.mask_smooth)
+                smoothed_polys.append(sp)
+                pts = sp.astype('int32').reshape(-1, 1, 2)
                 cv2.fillPoly(overlay, [pts], color)
 
             # Blend once to preserve image quality (avoid repeated resampling)
             frame = cv2.addWeighted(frame, 0.62, overlay, 0.38, 0.0)
 
-            for i, poly in enumerate(polys):
+            for i, poly in enumerate(smoothed_polys):
                 color = palette[i % len(palette)]
                 if poly is None or len(poly) < 3:
                     continue

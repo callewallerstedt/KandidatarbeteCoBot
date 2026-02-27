@@ -923,6 +923,7 @@ class App(tk.Tk):
         self.human_model_var = tk.StringVar(value='yolo11n-pose.pt')
         self.human_conf_var = tk.StringVar(value='0.20')
         self.human_alpha_var = tk.StringVar(value='0.30')
+        self.mask_smooth_var = tk.StringVar(value='2')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -970,7 +971,10 @@ class App(tk.Tk):
         ttk.Label(frm, text='Human alpha').grid(row=12, column=1, sticky='e')
         ttk.Entry(frm, textvariable=self.human_alpha_var, width=8).grid(row=12, column=2, sticky='w')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=13, column=0, pady=8)
+        ttk.Label(frm, text='Mask smooth (0 off)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.mask_smooth_var, width=8).grid(row=13, column=1, sticky='w')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=14, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -1582,6 +1586,7 @@ class App(tk.Tk):
             '--human-model', self.human_model_var.get(),
             '--human-conf', self.human_conf_var.get(),
             '--human-alpha', self.human_alpha_var.get(),
+            '--mask-smooth', self.mask_smooth_var.get(),
         ]
         if self.count_log_var.get():
             cmd.append('--count-log')
