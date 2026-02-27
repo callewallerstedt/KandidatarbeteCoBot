@@ -852,7 +852,7 @@ class App(tk.Tk):
         self.human_joints_var = tk.BooleanVar(value=False)
         self.human_model_var = tk.StringVar(value='yolo11n-pose.pt')
         self.human_conf_var = tk.StringVar(value='0.20')
-        self.human_alpha_var = tk.StringVar(value='0.15')
+        self.human_alpha_var = tk.StringVar(value='0.30')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')

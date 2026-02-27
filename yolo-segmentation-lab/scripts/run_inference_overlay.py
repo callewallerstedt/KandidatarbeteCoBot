@@ -25,7 +25,7 @@ def main():
     ap.add_argument('--human-joints', action='store_true', help='Enable human arm joint tracking overlay')
     ap.add_argument('--human-model', default='yolo11n-pose.pt', help='Pose model for human joint tracking')
     ap.add_argument('--human-conf', type=float, default=0.20)
-    ap.add_argument('--human-alpha', type=float, default=0.15, help='Opacity for thick arm corridor')
+    ap.add_argument('--human-alpha', type=float, default=0.30, help='Opacity for thick arm corridor')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
@@ -116,28 +116,39 @@ def main():
 
                 ps, pe, pw = pts
                 color = (80, 255, 255)
+                corridor_thick = 180  # intentionally very large (10x-style corridor)
+                center_thick = 3
+                hand_end = None
 
                 # shoulder->elbow if available
                 if ps is not None and pe is not None:
-                    cv2.line(thick, ps, pe, color, 18, cv2.LINE_AA)
-                    cv2.line(out, ps, pe, color, 3, cv2.LINE_AA)
+                    cv2.line(thick, ps, pe, color, corridor_thick, cv2.LINE_AA)
+                    cv2.line(out, ps, pe, color, center_thick, cv2.LINE_AA)
 
                 # elbow->wrist if available
                 if pe is not None and pw is not None:
-                    cv2.line(thick, pe, pw, color, 18, cv2.LINE_AA)
-                    cv2.line(out, pe, pw, color, 3, cv2.LINE_AA)
+                    cv2.line(thick, pe, pw, color, corridor_thick, cv2.LINE_AA)
+                    cv2.line(out, pe, pw, color, center_thick, cv2.LINE_AA)
 
                     # approximate wrist->middle-of-hand extension
                     dx, dy = (pw[0] - pe[0], pw[1] - pe[1])
                     hx, hy = int(pw[0] + 0.35 * dx), int(pw[1] + 0.35 * dy)
                     hand_mid = (hx, hy)
-                    cv2.line(thick, pw, hand_mid, color, 14, cv2.LINE_AA)
+                    hand_end = hand_mid
+                    cv2.line(thick, pw, hand_mid, color, int(corridor_thick * 0.8), cv2.LINE_AA)
                     cv2.line(out, pw, hand_mid, color, 2, cv2.LINE_AA)
 
                 # if shoulder is missing but forearm visible, still draw forearm (requested)
                 if ps is None and pe is not None and pw is not None:
-                    cv2.line(thick, pe, pw, color, 20, cv2.LINE_AA)
-                    cv2.line(out, pe, pw, color, 3, cv2.LINE_AA)
+                    cv2.line(thick, pe, pw, color, corridor_thick, cv2.LINE_AA)
+                    cv2.line(out, pe, pw, color, center_thick, cv2.LINE_AA)
+                    hand_end = pw
+
+                # big circle at hand end: diameter = 1.5x line diameter
+                if hand_end is not None:
+                    r = max(8, int(0.75 * corridor_thick))
+                    cv2.circle(thick, hand_end, r, color, -1, cv2.LINE_AA)
+                    cv2.circle(out, hand_end, max(2, int(0.12 * r)), color, 2, cv2.LINE_AA)
 
                 for p in [ps, pe, pw]:
                     if p is not None:
