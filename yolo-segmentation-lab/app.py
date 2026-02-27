@@ -85,6 +85,13 @@ class App(tk.Tk):
         notebook.add(self.tab_infer, text='10) Inference')
 
         self.class_id_choices = [str(i) for i in range(0, 25)]
+        self.seg_model_presets = {
+            'Nano (YOLO11n-seg)': 'yolo11n-seg.pt',
+            'Small (YOLO11s-seg)': 'yolo11s-seg.pt',
+            'Medium (YOLO11m-seg)': 'yolo11m-seg.pt',
+            'Large (YOLO11l-seg)': 'yolo11l-seg.pt',
+            'XLarge (YOLO11x-seg)': 'yolo11x-seg.pt',
+        }
 
         self.build_instructions_tab()
         self.build_data_tab()
@@ -815,6 +822,7 @@ class App(tk.Tk):
     def build_train_tab(self):
         frm = self.tab_train
         self.model_var = tk.StringVar(value='yolo11n-seg.pt')
+        self.model_preset_var = tk.StringVar(value='Nano (YOLO11n-seg)')
         self.epochs_var = tk.StringVar(value='80')
         self.imgsz_var = tk.StringVar(value='960')
         self.batch_var = tk.StringVar(value='8')
@@ -824,24 +832,30 @@ class App(tk.Tk):
         ttk.Label(frm, text='Model/weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.model_var).grid(row=0, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_train_model).grid(row=0, column=2)
-        ttk.Label(frm, text='Tip: yolo11n-seg.pt = fresh train, runs/.../best.pt = continue/fine-tune').grid(row=1, column=0, columnspan=3, sticky='w')
 
-        ttk.Label(frm, text='Epochs').grid(row=2, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.epochs_var).grid(row=2, column=1, sticky='we')
+        ttk.Label(frm, text='Preset').grid(row=1, column=0, sticky='w')
+        ttk.Combobox(frm, textvariable=self.model_preset_var, values=list(self.seg_model_presets.keys()), state='readonly', width=28).grid(row=1, column=1, sticky='w')
+        ttk.Button(frm, text='Use preset', command=self.apply_train_preset).grid(row=1, column=2, sticky='w')
+        ttk.Button(frm, text='Download all seg presets', command=self.download_seg_presets).grid(row=1, column=2, padx=(90,0), sticky='w')
 
-        ttk.Label(frm, text='Image size').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.imgsz_var).grid(row=3, column=1, sticky='we')
+        ttk.Label(frm, text='Tip: preset names = full model sizes. Use runs/.../best.pt to continue/fine-tune').grid(row=2, column=0, columnspan=3, sticky='w')
 
-        ttk.Label(frm, text='Batch').grid(row=4, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.batch_var).grid(row=4, column=1, sticky='we')
+        ttk.Label(frm, text='Epochs').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.epochs_var).grid(row=3, column=1, sticky='we')
 
-        ttk.Label(frm, text='Device').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.device_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Image size').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.imgsz_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Label(frm, text='Workers (Windows: use 0)').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.workers_var).grid(row=6, column=1, sticky='we')
+        ttk.Label(frm, text='Batch').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.batch_var).grid(row=5, column=1, sticky='we')
 
-        ttk.Button(frm, text='Start training', command=self.train).grid(row=7, column=0, pady=8)
+        ttk.Label(frm, text='Device').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.device_var).grid(row=6, column=1, sticky='we')
+
+        ttk.Label(frm, text='Workers (Windows: use 0)').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.workers_var).grid(row=7, column=1, sticky='we')
+
+        ttk.Button(frm, text='Start training', command=self.train).grid(row=8, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_ddp_tab(self):
@@ -853,6 +867,7 @@ class App(tk.Tk):
         self.ddp_node_rank_var = tk.StringVar(value='0')
         self.ddp_nproc_var = tk.StringVar(value='1')
         self.ddp_model_var = tk.StringVar(value='yolo11n-seg.pt')
+        self.ddp_model_preset_var = tk.StringVar(value='Nano (YOLO11n-seg)')
         self.ddp_epochs_var = tk.StringVar(value='50')
         self.ddp_imgsz_var = tk.StringVar(value='960')
         self.ddp_batch_var = tk.StringVar(value='8')
@@ -885,23 +900,25 @@ class App(tk.Tk):
         ttk.Label(frm, text='Model/weights').grid(row=8, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.ddp_model_var).grid(row=8, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_ddp_model).grid(row=8, column=2)
+        ttk.Combobox(frm, textvariable=self.ddp_model_preset_var, values=list(self.seg_model_presets.keys()), state='readonly', width=28).grid(row=9, column=1, sticky='w')
+        ttk.Button(frm, text='Use preset', command=self.apply_ddp_preset).grid(row=9, column=2, sticky='w')
 
-        ttk.Label(frm, text='Epochs').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.ddp_epochs_var).grid(row=9, column=1, sticky='w')
+        ttk.Label(frm, text='Epochs').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_epochs_var).grid(row=10, column=1, sticky='w')
 
-        ttk.Label(frm, text='Image size').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.ddp_imgsz_var).grid(row=10, column=1, sticky='w')
+        ttk.Label(frm, text='Image size').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_imgsz_var).grid(row=11, column=1, sticky='w')
 
-        ttk.Label(frm, text='Batch (per process)').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.ddp_batch_var).grid(row=11, column=1, sticky='w')
+        ttk.Label(frm, text='Batch (per process)').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_batch_var).grid(row=12, column=1, sticky='w')
 
-        ttk.Label(frm, text='Workers (recommend 0-1 on Windows)').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.ddp_workers_var).grid(row=12, column=1, sticky='w')
+        ttk.Label(frm, text='Workers (recommend 0-1 on Windows)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.ddp_workers_var).grid(row=13, column=1, sticky='w')
 
-        ttk.Button(frm, text='Show launch commands (all nodes)', command=self.show_ddp_commands).grid(row=13, column=0, pady=8, sticky='w')
-        ttk.Button(frm, text='Start DDP on THIS node', command=self.start_ddp_local).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Show launch commands (all nodes)', command=self.show_ddp_commands).grid(row=14, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Start DDP on THIS node', command=self.start_ddp_local).grid(row=14, column=1, pady=8, sticky='w')
 
-        ttk.Label(frm, text='Use same repo/data on all PCs. Run rank 0 on master first, then other ranks.').grid(row=14, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Use same repo/data on all PCs. Run rank 0 on master first, then other ranks.').grid(row=15, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_infer_tab(self):
@@ -1001,6 +1018,36 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select model/weights for DDP training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
             self.ddp_model_var.set(p)
+
+    def apply_train_preset(self):
+        key = self.model_preset_var.get().strip()
+        val = self.seg_model_presets.get(key)
+        if not val:
+            self.log_line('Train preset not found.')
+            return
+        self.model_var.set(val)
+        self.log_line(f'Train model preset selected: {key} -> {val}')
+
+    def apply_ddp_preset(self):
+        key = self.ddp_model_preset_var.get().strip()
+        val = self.seg_model_presets.get(key)
+        if not val:
+            self.log_line('DDP preset not found.')
+            return
+        self.ddp_model_var.set(val)
+        self.log_line(f'DDP model preset selected: {key} -> {val}')
+
+    def download_seg_presets(self):
+        names = list(self.seg_model_presets.values())
+        py = (
+            'from ultralytics import YOLO\n'
+            f'names={names!r}\n'
+            'for n in names:\n'
+            '    print(f"Downloading/checking: {n}")\n'
+            '    YOLO(n)\n'
+            'print("Done downloading segmentation presets")\n'
+        )
+        self.run_cmd([str(PY), '-c', py])
 
     def _parse_ddp_hosts(self):
         raw = self.ddp_hosts_var.get().strip()
