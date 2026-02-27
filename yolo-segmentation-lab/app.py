@@ -31,6 +31,8 @@ class App(tk.Tk):
         self.tab_data = ttk.Frame(notebook)
         self.tab_synth = ttk.Frame(notebook)
         self.tab_synth_multi = ttk.Frame(notebook)
+        self.tab_synth_all = ttk.Frame(notebook)
+        self.tab_cutout = ttk.Frame(notebook)
         self.tab_manual = ttk.Frame(notebook)
         self.tab_obstruction = ttk.Frame(notebook)
         self.tab_train = ttk.Frame(notebook)
@@ -40,11 +42,13 @@ class App(tk.Tk):
         notebook.add(self.tab_data, text='1) Data Prep')
         notebook.add(self.tab_synth, text='2) Synthetic BG')
         notebook.add(self.tab_synth_multi, text='3) Multi-Instance Synth')
-        notebook.add(self.tab_obstruction, text='4) Obstruction Data')
-        notebook.add(self.tab_manual, text='5) Manual Real Data')
-        notebook.add(self.tab_train, text='6) Train')
-        notebook.add(self.tab_ddp, text='7) DDP Multi-PC')
-        notebook.add(self.tab_infer, text='8) Inference')
+        notebook.add(self.tab_synth_all, text='4) All Synth Runner')
+        notebook.add(self.tab_obstruction, text='5) Obstruction Data')
+        notebook.add(self.tab_cutout, text='6) Add Masked Object')
+        notebook.add(self.tab_manual, text='7) Manual Real Data')
+        notebook.add(self.tab_train, text='8) Train')
+        notebook.add(self.tab_ddp, text='9) DDP Multi-PC')
+        notebook.add(self.tab_infer, text='10) Inference')
 
         self.class_id_choices = [str(i) for i in range(0, 25)]
 
@@ -52,7 +56,9 @@ class App(tk.Tk):
         self.build_data_tab()
         self.build_synth_tab()
         self.build_synth_multi_tab()
+        self.build_synth_all_tab()
         self.build_obstruction_tab()
+        self.build_cutout_tab()
         self.build_manual_tab()
         self.build_train_tab()
         self.build_ddp_tab()
@@ -62,6 +68,8 @@ class App(tk.Tk):
         self.auto_assign_class_id(self.class_var, self.class_id_var)
         self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var)
         self.auto_assign_class_id(self.synth_multi_class_var, self.synth_multi_class_id_var)
+        self.auto_assign_class_id(self.synth_all_class_var, self.synth_all_class_id_var)
+        self.auto_assign_class_id(self.cutout_class_var, self.cutout_class_id_var)
         self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var)
         self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var)
 
@@ -255,12 +263,12 @@ class App(tk.Tk):
                 split_vals.append(f'{i}:{n}')
         self.split_class_choices = split_vals
 
-        for cb_name in ['data_class_cb', 'synth_class_cb', 'synth_multi_class_cb', 'obs_class_cb', 'manual_class_cb']:
+        for cb_name in ['data_class_cb', 'synth_class_cb', 'synth_multi_class_cb', 'synth_all_class_cb', 'cutout_class_cb', 'obs_class_cb', 'manual_class_cb']:
             cb = getattr(self, cb_name, None)
             if cb is not None:
                 cb['values'] = self.class_choices
 
-        for cb_name in ['data_class_id_cb', 'synth_class_id_cb', 'synth_multi_class_id_cb', 'obs_class_id_cb', 'manual_class_id_cb']:
+        for cb_name in ['data_class_id_cb', 'synth_class_id_cb', 'synth_multi_class_id_cb', 'synth_all_class_id_cb', 'cutout_class_id_cb', 'obs_class_id_cb', 'manual_class_id_cb']:
             cb = getattr(self, cb_name, None)
             if cb is not None:
                 cb['values'] = self.class_id_choices
@@ -474,6 +482,50 @@ class App(tk.Tk):
         ttk.Label(frm, text='Creates multiple same-class instances per image, including touching/overlapping placements.').grid(row=15, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
+    def build_synth_all_tab(self):
+        frm = self.tab_synth_all
+        self.synth_all_class_var = tk.StringVar(value='object_name')
+        self.synth_all_class_id_var = tk.StringVar(value='0')
+        self.synth_all_bg_dir_var = tk.StringVar()
+        self.synth_all_obs_dir_var = tk.StringVar()
+        self.synth_all_run_var = tk.StringVar(value='allrun')
+        self.synth_all_n_bg_var = tk.StringVar(value='300')
+        self.synth_all_n_multi_var = tk.StringVar(value='200')
+        self.synth_all_n_obs_var = tk.StringVar(value='200')
+        self.synth_all_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_all_class_var, self.synth_all_class_id_var))
+
+        ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
+        self.synth_all_class_cb = ttk.Combobox(frm, textvariable=self.synth_all_class_var)
+        self.synth_all_class_cb.grid(row=0, column=1, sticky='we')
+
+        ttk.Label(frm, text='Class id').grid(row=1, column=0, sticky='w')
+        self.synth_all_class_id_cb = ttk.Combobox(frm, textvariable=self.synth_all_class_id_var, values=self.class_id_choices, width=8)
+        self.synth_all_class_id_cb.grid(row=1, column=1, sticky='w')
+
+        ttk.Label(frm, text='Background folder').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_synth_all_bg_dir).grid(row=2, column=2)
+
+        ttk.Label(frm, text='Obstruction folder (for obs mode)').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_dir_var, width=70).grid(row=3, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_synth_all_obs_dir).grid(row=3, column=2)
+
+        ttk.Label(frm, text='Run base name').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_run_var).grid(row=4, column=1, sticky='we')
+
+        ttk.Label(frm, text='Synthetic BG count').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=5, column=1, sticky='w')
+
+        ttk.Label(frm, text='Multi-instance count').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_multi_var, width=10).grid(row=6, column=1, sticky='w')
+
+        ttk.Label(frm, text='Obstruction count').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=7, column=1, sticky='w')
+
+        ttk.Button(frm, text='Run all synthetic generators', command=self.run_all_synth).grid(row=8, column=0, pady=8)
+        ttk.Label(frm, text='Creates runs named <base>_bg, <base>_multi, <base>_obs. Use run filter with base name later.').grid(row=9, column=0, columnspan=3, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
     def build_obstruction_tab(self):
         frm = self.tab_obstruction
         self.obs_class_var = tk.StringVar(value='object_name')
@@ -537,6 +589,33 @@ class App(tk.Tk):
         ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=13, column=0, pady=8)
         ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=13, column=1, pady=8, sticky='w')
         ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=14, column=0, columnspan=3, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
+    def build_cutout_tab(self):
+        frm = self.tab_cutout
+        self.cutout_image_var = tk.StringVar()
+        self.cutout_class_var = tk.StringVar(value='object_name')
+        self.cutout_class_id_var = tk.StringVar(value='0')
+        self.cutout_prefix_var = tk.StringVar(value='cutout')
+        self.cutout_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.cutout_class_var, self.cutout_class_id_var))
+
+        ttk.Label(frm, text='Source image').grid(row=0, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.cutout_image_var, width=70).grid(row=0, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_cutout_image).grid(row=0, column=2)
+
+        ttk.Label(frm, text='Class name').grid(row=1, column=0, sticky='w')
+        self.cutout_class_cb = ttk.Combobox(frm, textvariable=self.cutout_class_var)
+        self.cutout_class_cb.grid(row=1, column=1, sticky='we')
+
+        ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
+        self.cutout_class_id_cb = ttk.Combobox(frm, textvariable=self.cutout_class_id_var, values=self.class_id_choices, width=8)
+        self.cutout_class_id_cb.grid(row=2, column=1, sticky='w')
+
+        ttk.Label(frm, text='Filename prefix').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.cutout_prefix_var).grid(row=3, column=1, sticky='we')
+
+        ttk.Button(frm, text='Draw box and create masked object sample', command=self.create_cutout_sample).grid(row=4, column=0, pady=8)
+        ttk.Label(frm, text='You will draw bbox, then GrabCut creates mask and saves image+label for synth source use.').grid(row=5, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -844,6 +923,21 @@ class App(tk.Tk):
         if p:
             self.synth_multi_bg_dir_var.set(p)
 
+    def pick_synth_all_bg_dir(self):
+        p = filedialog.askdirectory(title='Select background images folder (all synth runner)')
+        if p:
+            self.synth_all_bg_dir_var.set(p)
+
+    def pick_synth_all_obs_dir(self):
+        p = filedialog.askdirectory(title='Select obstruction folder (all synth runner)')
+        if p:
+            self.synth_all_obs_dir_var.set(p)
+
+    def pick_cutout_image(self):
+        p = filedialog.askopenfilename(title='Select source image for masked object sample')
+        if p:
+            self.cutout_image_var.set(p)
+
     def pick_manual_video(self):
         p = filedialog.askopenfilename(title='Select video for manual review prep')
         if p:
@@ -955,6 +1049,74 @@ class App(tk.Tk):
             self.log_line('Please select a background folder first (multi-instance).')
             return
         self.run_cmd(self._synth_multi_cmd_base())
+
+    def create_cutout_sample(self):
+        if not self.ensure_class_registered(self.cutout_class_var.get(), self.cutout_class_id_var.get()):
+            return
+        if not self.cutout_image_var.get().strip():
+            self.log_line('Please select a source image first.')
+            return
+        cmd = [
+            str(PY), 'scripts/add_masked_object_from_box.py',
+            '--image', self.cutout_image_var.get().strip(),
+            '--class-name', self.cutout_class_var.get(),
+            '--class-id', self.cutout_class_id_var.get(),
+            '--prefix', self.cutout_prefix_var.get().strip() or 'cutout',
+        ]
+        self.run_cmd(cmd)
+
+    def run_all_synth(self):
+        if not self.ensure_class_registered(self.synth_all_class_var.get(), self.synth_all_class_id_var.get()):
+            return
+        if not self.synth_all_bg_dir_var.get().strip():
+            self.log_line('Please select a background folder for all-synth runner.')
+            return
+
+        base = self.synth_all_run_var.get().strip() or 'allrun'
+        cls = self.synth_all_class_var.get()
+        cid = self.synth_all_class_id_var.get()
+        bg = self.synth_all_bg_dir_var.get().strip()
+        obs = self.synth_all_obs_dir_var.get().strip()
+
+        n_bg = int(self.synth_all_n_bg_var.get() or '0')
+        n_multi = int(self.synth_all_n_multi_var.get() or '0')
+        n_obs = int(self.synth_all_n_obs_var.get() or '0')
+
+        if n_bg > 0:
+            cmd_bg = [
+                str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
+                '--class-name', cls, '--class-id', cid,
+                '--background-dir', bg,
+                '--num-synthetic', str(n_bg),
+                '--run-name', f'{base}_bg',
+            ]
+            self.run_cmd(cmd_bg)
+
+        if n_multi > 0:
+            cmd_multi = [
+                str(PY), 'scripts/synthesize_multi_instance.py',
+                '--class-name', cls, '--class-id', cid,
+                '--background-dir', bg,
+                '--num-synthetic', str(n_multi),
+                '--run-name', f'{base}_multi',
+            ]
+            self.run_cmd(cmd_multi)
+
+        if n_obs > 0:
+            if not obs:
+                self.log_line('Obstruction count > 0 but no obstruction folder selected.')
+            else:
+                cmd_obs = [
+                    str(PY), 'scripts/synthesize_with_obstructions.py',
+                    '--class-name', cls, '--class-id', cid,
+                    '--obstruction-dir', obs,
+                    '--background-dir', bg,
+                    '--num-synthetic', str(n_obs),
+                    '--run-name', f'{base}_obs',
+                ]
+                self.run_cmd(cmd_obs)
+
+        self.log_line(f'All-synth runner started with run base: {base}. Use run filter "{base}" in Data Prep.')
 
     def prepare_manual(self):
         if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
