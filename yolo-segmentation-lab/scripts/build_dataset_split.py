@@ -29,6 +29,7 @@ def main():
     dst = root / 'yolo_dataset'
 
     all_pairs = []
+    skipped_overlay_like = 0
     classes = sorted([d.name for d in images_root.iterdir() if d.is_dir()]) if images_root.exists() else []
     if not classes:
         raise RuntimeError('No class folders found in data/images')
@@ -51,6 +52,13 @@ def main():
             rel = im.relative_to(cls_img_root)
             rel_str = rel.as_posix()
             stem = im.stem
+            stem_l = stem.lower()
+
+            # Safety guard: never train on visualization/debug/overlay renders.
+            if any(tag in stem_l for tag in ['overlay', 'preview', 'debug', '_viz']):
+                skipped_overlay_like += 1
+                continue
+
             is_synth = ('_synth_' in stem) or ('synth_runs' in rel.parts)
             is_obs = ('_obs_' in stem) or ('obs_runs' in rel.parts)
             if args.mode == 'real' and (is_synth or is_obs):
@@ -100,6 +108,7 @@ def main():
     print(f'classes: {", ".join(classes)}')
     for k, v in splits.items():
         print(f'{k}: {len(v)}')
+    print(f'skipped overlay/debug-like images: {skipped_overlay_like}')
 
 
 if __name__ == '__main__':
