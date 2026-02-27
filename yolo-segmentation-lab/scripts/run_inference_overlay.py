@@ -25,7 +25,7 @@ def main():
     ap.add_argument('--human-joints', action='store_true', help='Enable human arm joint tracking overlay')
     ap.add_argument('--human-model', default='yolo11n-pose.pt', help='Pose model for human joint tracking')
     ap.add_argument('--human-conf', type=float, default=0.20)
-    ap.add_argument('--human-alpha', type=float, default=0.30, help='Opacity for thick arm corridor')
+    ap.add_argument('--human-alpha', type=float, default=0.15, help='Opacity for thick arm corridor')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
