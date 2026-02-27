@@ -149,6 +149,72 @@ class App(tk.Tk):
         if cid is not None:
             id_var.set(str(cid))
 
+    def ensure_class_registered(self, class_name: str, class_id_text: str):
+        cname = (class_name or '').strip()
+        if not cname:
+            self.log_line('Class name is empty; cannot auto-register class.')
+            return False
+        try:
+            cid = int(str(class_id_text).strip())
+        except Exception:
+            self.log_line(f'Invalid class id: {class_id_text}')
+            return False
+
+        dataset_yaml = ROOT / 'dataset.yaml'
+        base = {
+            'path': 'data/yolo_dataset',
+            'train': 'images/train',
+            'val': 'images/val',
+            'test': 'images/test',
+            'names': {},
+        }
+        try:
+            if dataset_yaml.exists():
+                data = yaml.safe_load(dataset_yaml.read_text(encoding='utf-8')) or {}
+            else:
+                data = base
+
+            names = data.get('names', {})
+            if isinstance(names, list):
+                id_to_name = {int(i): str(n) for i, n in enumerate(names)}
+            elif isinstance(names, dict):
+                id_to_name = {int(k): str(v) for k, v in names.items()}
+            else:
+                id_to_name = {}
+
+            # already correct
+            if id_to_name.get(cid) == cname:
+                return True
+
+            # same class name exists on another id -> keep existing stable mapping
+            for k, v in id_to_name.items():
+                if v == cname and k != cid:
+                    self.log_line(f'Class "{cname}" already mapped to id={k}; keeping existing mapping.')
+                    return True
+
+            # id occupied by another class -> choose next free id to keep things safe
+            if cid in id_to_name and id_to_name[cid] != cname:
+                used = set(id_to_name.keys())
+                nid = 0
+                while nid in used:
+                    nid += 1
+                self.log_line(f'Class id {cid} already used by "{id_to_name[cid]}"; auto-assigning "{cname}" -> id {nid}.')
+                cid = nid
+
+            id_to_name[cid] = cname
+            data.setdefault('path', 'data/yolo_dataset')
+            data.setdefault('train', 'images/train')
+            data.setdefault('val', 'images/val')
+            data.setdefault('test', 'images/test')
+            data['names'] = {int(k): id_to_name[k] for k in sorted(id_to_name.keys())}
+            dataset_yaml.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
+            self.log_line(f'Auto-registered class in dataset.yaml: id={cid}, name={cname}')
+            self.refresh_class_options()
+            return True
+        except Exception as e:
+            self.log_line(f'Failed to auto-register class in dataset.yaml: {e}')
+            return False
+
     def refresh_class_options(self):
         data_images = ROOT / 'data' / 'images'
         names = []
@@ -498,6 +564,8 @@ class App(tk.Tk):
             self.obs_bg_dir_var.set(p)
 
     def autolabel(self):
+        if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
+            return
         cmd = [
             str(PY), 'scripts/video_to_yoloseg_autolabel.py',
             '--video', self.video_var.get(),
@@ -513,6 +581,8 @@ class App(tk.Tk):
         self.after(1000, self.refresh_class_options)
 
     def generate_synth(self):
+        if not self.ensure_class_registered(self.synth_class_var.get(), self.synth_class_id_var.get()):
+            return
         if not self.bg_dir_var.get().strip():
             self.log_line('Please select a background folder first.')
             return
@@ -529,6 +599,8 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def prepare_manual(self):
+        if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
+            return
         if not self.manual_video_var.get().strip():
             self.log_line('Please select a video file first.')
             return
@@ -558,6 +630,8 @@ class App(tk.Tk):
         ]
 
     def preview_obstruction(self):
+        if not self.ensure_class_registered(self.obs_class_var.get(), self.obs_class_id_var.get()):
+            return
         if not self.obs_dir_var.get().strip():
             self.log_line('Please select obstruction folder first.')
             return
@@ -568,6 +642,8 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def generate_obstruction(self):
+        if not self.ensure_class_registered(self.obs_class_var.get(), self.obs_class_id_var.get()):
+            return
         if not self.obs_dir_var.get().strip():
             self.log_line('Please select obstruction folder first.')
             return
