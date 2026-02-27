@@ -48,17 +48,16 @@ def poly_to_mask(poly: np.ndarray, w: int, h: int):
     return m
 
 
-def pick_random_background(bg_files, out_w, out_h):
+def pick_random_background(bg_files, max_dim=1920):
     bg = cv2.imread(str(random.choice(bg_files)))
     if bg is None:
-        return np.full((out_h, out_w, 3), 127, dtype=np.uint8)
+        return np.full((1080, 1920, 3), 127, dtype=np.uint8)
     bh, bw = bg.shape[:2]
-    scale = max(out_w / max(bw, 1), out_h / max(bh, 1))
-    nw, nh = int(bw * scale), int(bh * scale)
-    bg = cv2.resize(bg, (nw, nh), interpolation=cv2.INTER_AREA)
-    x0 = random.randint(0, max(nw - out_w, 0))
-    y0 = random.randint(0, max(nh - out_h, 0))
-    return bg[y0:y0 + out_h, x0:x0 + out_w].copy()
+    md = max(bw, bh)
+    if md > max_dim:
+        s = max_dim / float(md)
+        bg = cv2.resize(bg, (max(1, int(bw * s)), max(1, int(bh * s))), interpolation=cv2.INTER_AREA)
+    return bg.copy()
 
 
 def load_obstruction(path: Path):
@@ -195,28 +194,37 @@ def main():
         src = cv2.imread(str(im_path))
         if src is None:
             continue
-        h, w = src.shape[:2]
+        src_h, src_w = src.shape[:2]
 
-        cls_id, poly = load_yolo_polygon(lb_path, w, h)
+        cls_id, poly = load_yolo_polygon(lb_path, src_w, src_h)
         if poly is None:
             continue
 
-        obj_mask_full = poly_to_mask(poly, w, h)
+        obj_mask_full = poly_to_mask(poly, src_w, src_h)
         x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
         obj_crop = src[y:y + bh, x:x + bw]
         obj_crop_mask = obj_mask_full[y:y + bh, x:x + bw]
 
-        # Generate base image: 10% keep original white background, else random background
+        # Generate base image: keep original white background or use full random background (preserve proportions)
         if random.random() < args.white_bg_prob:
             base = src.copy()
+            h, w = base.shape[:2]
             placed_obj_mask = obj_mask_full.copy()
         else:
-            base = pick_random_background(bg_files, w, h)
+            base = pick_random_background(bg_files)
+            h, w = base.shape[:2]
             scale = random.uniform(min(args.object_scale_min, args.object_scale_max), max(args.object_scale_min, args.object_scale_max))
             tw = max(8, int(bw * scale))
             th = max(8, int(bh * scale))
             obj_r = cv2.resize(obj_crop, (tw, th), interpolation=cv2.INTER_LINEAR)
             m_r = cv2.resize(obj_crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+
+            if tw >= w or th >= h:
+                s2 = min((w - 2) / max(tw, 1), (h - 2) / max(th, 1), 1.0)
+                tw = max(8, int(tw * s2))
+                th = max(8, int(th * s2))
+                obj_r = cv2.resize(obj_crop, (tw, th), interpolation=cv2.INTER_LINEAR)
+                m_r = cv2.resize(obj_crop_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
 
             px = random.randint(0, max(w - tw, 0))
             py = random.randint(0, max(h - th, 0))
