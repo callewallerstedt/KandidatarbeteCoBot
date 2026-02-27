@@ -22,10 +22,15 @@ def main():
     ap.add_argument('--cam-height', type=int, default=1080, help='Requested webcam capture height')
     ap.add_argument('--count-log', action='store_true', help='Print per-frame instance count to terminal')
     ap.add_argument('--count-log-every', type=int, default=10, help='Log every N frames when --count-log is enabled')
+    ap.add_argument('--human-joints', action='store_true', help='Enable human arm joint tracking overlay')
+    ap.add_argument('--human-model', default='yolo11n-pose.pt', help='Pose model for human joint tracking')
+    ap.add_argument('--human-conf', type=float, default=0.20)
+    ap.add_argument('--human-alpha', type=float, default=0.30, help='Opacity for thick arm corridor')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
     model = YOLO(args.weights)
+    pose_model = YOLO(args.human_model) if args.human_joints else None
 
     win = 'YOLO-Seg Overlay (q to quit)'
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -77,6 +82,70 @@ def main():
         cv2.putText(frame, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
         return frame, count
 
+    def draw_human_arm_overlay(frame, pose_r):
+        if pose_r is None or pose_r.keypoints is None:
+            return frame
+
+        out = frame.copy()
+        thick = frame.copy()
+        kpts = pose_r.keypoints.xy
+        if kpts is None:
+            return frame
+        kpts = kpts.cpu().numpy()
+
+        # COCO keypoint indices used by YOLO pose:
+        # 5 l-shoulder, 6 r-shoulder, 7 l-elbow, 8 r-elbow, 9 l-wrist, 10 r-wrist
+        arms = [(5, 7, 9), (6, 8, 10)]
+
+        for person in kpts:
+            for s_idx, e_idx, w_idx in arms:
+                p_s = person[s_idx] if s_idx < len(person) else None
+                p_e = person[e_idx] if e_idx < len(person) else None
+                p_w = person[w_idx] if w_idx < len(person) else None
+
+                pts = []
+                for p in [p_s, p_e, p_w]:
+                    if p is None:
+                        pts.append(None)
+                    else:
+                        x, y = int(p[0]), int(p[1])
+                        if x <= 1 and y <= 1:
+                            pts.append(None)
+                        else:
+                            pts.append((x, y))
+
+                ps, pe, pw = pts
+                color = (80, 255, 255)
+
+                # shoulder->elbow if available
+                if ps is not None and pe is not None:
+                    cv2.line(thick, ps, pe, color, 18, cv2.LINE_AA)
+                    cv2.line(out, ps, pe, color, 3, cv2.LINE_AA)
+
+                # elbow->wrist if available
+                if pe is not None and pw is not None:
+                    cv2.line(thick, pe, pw, color, 18, cv2.LINE_AA)
+                    cv2.line(out, pe, pw, color, 3, cv2.LINE_AA)
+
+                    # approximate wrist->middle-of-hand extension
+                    dx, dy = (pw[0] - pe[0], pw[1] - pe[1])
+                    hx, hy = int(pw[0] + 0.35 * dx), int(pw[1] + 0.35 * dy)
+                    hand_mid = (hx, hy)
+                    cv2.line(thick, pw, hand_mid, color, 14, cv2.LINE_AA)
+                    cv2.line(out, pw, hand_mid, color, 2, cv2.LINE_AA)
+
+                # if shoulder is missing but forearm visible, still draw forearm (requested)
+                if ps is None and pe is not None and pw is not None:
+                    cv2.line(thick, pe, pw, color, 20, cv2.LINE_AA)
+                    cv2.line(out, pe, pw, color, 3, cv2.LINE_AA)
+
+                for p in [ps, pe, pw]:
+                    if p is not None:
+                        cv2.circle(out, p, 4, (255, 255, 255), -1, cv2.LINE_AA)
+
+        cv2.addWeighted(thick, max(0.0, min(1.0, args.human_alpha)), out, 1.0 - max(0.0, min(1.0, args.human_alpha)), 0.0, out)
+        return out
+
     def show_and_maybe_save(frame):
         nonlocal writer, save_path
         h, w = frame.shape[:2]
@@ -120,6 +189,9 @@ def main():
             frame_idx += 1
             r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, verbose=False)[0]
             frame, count = render_result(r)
+            if pose_model is not None:
+                pr = pose_model.predict(raw, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
+                frame = draw_human_arm_overlay(frame, pr)
             if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
                 print(f'frame {frame_idx}: count={count}')
             if show_and_maybe_save(frame):
@@ -129,6 +201,9 @@ def main():
         for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device):
             frame_idx += 1
             frame, count = render_result(r)
+            if pose_model is not None and getattr(r, 'orig_img', None) is not None:
+                pr = pose_model.predict(r.orig_img, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
+                frame = draw_human_arm_overlay(frame, pr)
             if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
                 print(f'frame {frame_idx}: count={count}')
             if show_and_maybe_save(frame):

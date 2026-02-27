@@ -779,6 +779,10 @@ class App(tk.Tk):
         self.save_path_var = tk.StringVar(value='')
         self.count_log_var = tk.BooleanVar(value=True)
         self.count_log_every_var = tk.StringVar(value='10')
+        self.human_joints_var = tk.BooleanVar(value=False)
+        self.human_model_var = tk.StringVar(value='yolo11n-pose.pt')
+        self.human_conf_var = tk.StringVar(value='0.20')
+        self.human_alpha_var = tk.StringVar(value='0.30')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -817,7 +821,16 @@ class App(tk.Tk):
         ttk.Label(frm, text='Log every N frames').grid(row=10, column=1, sticky='e')
         ttk.Entry(frm, textvariable=self.count_log_every_var, width=8).grid(row=10, column=2, sticky='w')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=11, column=0, pady=8)
+        ttk.Checkbutton(frm, text='Enable human arm joint tracking', variable=self.human_joints_var).grid(row=11, column=0, sticky='w')
+        ttk.Label(frm, text='Pose model').grid(row=11, column=1, sticky='e')
+        ttk.Entry(frm, textvariable=self.human_model_var, width=24).grid(row=11, column=2, sticky='w')
+
+        ttk.Label(frm, text='Human conf').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.human_conf_var, width=8).grid(row=12, column=1, sticky='w')
+        ttk.Label(frm, text='Human alpha').grid(row=12, column=1, sticky='e')
+        ttk.Entry(frm, textvariable=self.human_alpha_var, width=8).grid(row=12, column=2, sticky='w')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=13, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -1297,9 +1310,14 @@ class App(tk.Tk):
             '--cam-width', self.cam_w_var.get(),
             '--cam-height', self.cam_h_var.get(),
             '--count-log-every', self.count_log_every_var.get(),
+            '--human-model', self.human_model_var.get(),
+            '--human-conf', self.human_conf_var.get(),
+            '--human-alpha', self.human_alpha_var.get(),
         ]
         if self.count_log_var.get():
             cmd.append('--count-log')
+        if self.human_joints_var.get():
+            cmd.append('--human-joints')
         if self.save_video_var.get():
             cmd.append('--save-video')
             if self.save_path_var.get().strip():
