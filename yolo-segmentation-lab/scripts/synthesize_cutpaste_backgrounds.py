@@ -48,17 +48,17 @@ def write_yolo(label_path: Path, class_id: int, poly: np.ndarray, w: int, h: int
     label_path.write_text(' '.join(vals) + '\n', encoding='utf-8')
 
 
-def pick_random_background(bg_files, out_w, out_h):
+def pick_random_background(bg_files, max_dim=1920):
     bg = cv2.imread(str(random.choice(bg_files)))
     if bg is None:
-        return np.full((out_h, out_w, 3), 127, dtype=np.uint8)
+        return np.full((1080, 1920, 3), 127, dtype=np.uint8)
     bh, bw = bg.shape[:2]
-    scale = max(out_w / max(bw, 1), out_h / max(bh, 1))
-    nw, nh = int(bw * scale), int(bh * scale)
-    bg = cv2.resize(bg, (nw, nh), interpolation=cv2.INTER_AREA)
-    x0 = random.randint(0, max(nw - out_w, 0))
-    y0 = random.randint(0, max(nh - out_h, 0))
-    return bg[y0:y0 + out_h, x0:x0 + out_w].copy()
+    # Keep original background proportions; only downscale very large images.
+    md = max(bw, bh)
+    if md > max_dim:
+        s = max_dim / float(md)
+        bg = cv2.resize(bg, (max(1, int(bw * s)), max(1, int(bh * s))), interpolation=cv2.INTER_AREA)
+    return bg.copy()
 
 
 def rotate_bound_pair(img, mask, angle):
@@ -85,17 +85,18 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_beta=None):
     src = cv2.imread(str(im_path))
     if src is None:
         return None
-    h, w = src.shape[:2]
-    cls_id, poly = load_yolo_polygon(lb_path, w, h)
+    src_h, src_w = src.shape[:2]
+    cls_id, poly = load_yolo_polygon(lb_path, src_w, src_h)
     if poly is None:
         return None
 
-    mask = poly_to_mask(poly, w, h)
+    mask = poly_to_mask(poly, src_w, src_h)
     x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
     crop = src[y:y + bh, x:x + bw]
     crop_mask = mask[y:y + bh, x:x + bw]
 
-    bg = pick_random_background(bg_files, w, h)
+    bg = pick_random_background(bg_files)
+    h, w = bg.shape[:2]
 
     scale = fixed_scale if fixed_scale is not None else random.uniform(args.min_scale, args.max_scale)
     angle = random.uniform(-args.max_rotation, args.max_rotation)

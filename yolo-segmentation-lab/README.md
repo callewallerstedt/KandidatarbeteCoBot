@@ -38,6 +38,7 @@ py -3.11 -m venv .venv
 - Inference (including explicit webcam capture resolution controls, e.g. 1920x1080)
 
 ## Synthetic run folders
+- Synthetic generation now keeps the selected background image proportions (no forced crop to source image aspect ratio).
 - New synthetic and obstruction generations are stored in per-run folders:
   - `data/images/<class>/synth_runs/<run_name>/`
   - `data/images/<class>/obs_runs/<run_name>/`
