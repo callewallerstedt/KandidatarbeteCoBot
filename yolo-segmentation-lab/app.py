@@ -52,6 +52,7 @@ class App(tk.Tk):
         self.build_train_tab()
         self.build_infer_tab()
         self.refresh_class_options()
+        self.sync_yaml_from_folders()
         self.auto_assign_class_id(self.class_var, self.class_id_var)
         self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var)
         self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var)
@@ -316,6 +317,7 @@ class App(tk.Tk):
         ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=14, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=14, column=1, sticky='we')
         ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=14, column=2)
+        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=15, column=0, pady=6, sticky='w')
 
         frm.columnconfigure(1, weight=1)
 
@@ -681,6 +683,67 @@ class App(tk.Tk):
             return
         self.run_cmd([str(PY), 'scripts/update_dataset_yaml.py', '--classes', *classes])
         self.after(500, self.refresh_class_options)
+
+    def sync_yaml_from_folders(self):
+        data_images = ROOT / 'data' / 'images'
+        folder_classes = sorted([p.name for p in data_images.iterdir() if p.is_dir()]) if data_images.exists() else []
+        if not folder_classes:
+            self.log_line('No class folders found in data/images to sync.')
+            return
+
+        dataset_yaml = ROOT / 'dataset.yaml'
+        data = {
+            'path': 'data/yolo_dataset',
+            'train': 'images/train',
+            'val': 'images/val',
+            'test': 'images/test',
+            'names': {},
+        }
+
+        if dataset_yaml.exists():
+            try:
+                loaded = yaml.safe_load(dataset_yaml.read_text(encoding='utf-8')) or {}
+                if isinstance(loaded, dict):
+                    data.update({k: v for k, v in loaded.items() if k in ['path', 'train', 'val', 'test', 'names']})
+            except Exception as e:
+                self.log_line(f'Warning: could not parse existing dataset.yaml, rebuilding: {e}')
+
+        names = data.get('names', {})
+        if isinstance(names, list):
+            id_to_name = {int(i): str(n) for i, n in enumerate(names)}
+        elif isinstance(names, dict):
+            id_to_name = {int(k): str(v) for k, v in names.items()}
+        else:
+            id_to_name = {}
+
+        existing_names = set(id_to_name.values())
+        added = []
+        for cname in folder_classes:
+            if cname in existing_names:
+                continue
+            nid = 0
+            used = set(id_to_name.keys())
+            while nid in used:
+                nid += 1
+            id_to_name[nid] = cname
+            existing_names.add(cname)
+            added.append((nid, cname))
+
+        data['path'] = data.get('path') or 'data/yolo_dataset'
+        data['train'] = data.get('train') or 'images/train'
+        data['val'] = data.get('val') or 'images/val'
+        data['test'] = data.get('test') or 'images/test'
+        data['names'] = {int(k): id_to_name[k] for k in sorted(id_to_name.keys())}
+
+        dataset_yaml.write_text(yaml.safe_dump(data, sort_keys=False), encoding='utf-8')
+        if added:
+            self.log_line('Auto-sync added classes: ' + ', '.join([f'{cid}:{cn}' for cid, cn in added]))
+        else:
+            self.log_line('Auto-sync complete: no new classes needed.')
+
+        ordered = [data['names'][k] for k in sorted(data['names'].keys())]
+        self.classes_var.set(' '.join(ordered))
+        self.refresh_class_options()
 
     def train(self):
         cmd = [
