@@ -7,6 +7,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog
 from tkinter.scrolledtext import ScrolledText
+import yaml
 
 ROOT = Path(__file__).resolve().parent
 PY = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -51,6 +52,10 @@ class App(tk.Tk):
         self.build_train_tab()
         self.build_infer_tab()
         self.refresh_class_options()
+        self.auto_assign_class_id(self.class_var, self.class_id_var)
+        self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var)
+        self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var)
+        self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var)
 
     def log_line(self, text):
         self.log.insert('end', text + '\n')
@@ -106,11 +111,55 @@ class App(tk.Tk):
         )
         txt.configure(state='disabled')
 
+    def load_dataset_class_map(self):
+        dataset_yaml = ROOT / 'dataset.yaml'
+        if not dataset_yaml.exists():
+            return {}, {}
+        try:
+            data = yaml.safe_load(dataset_yaml.read_text(encoding='utf-8')) or {}
+            names = data.get('names', {})
+            id_to_name = {}
+            if isinstance(names, list):
+                id_to_name = {int(i): str(n) for i, n in enumerate(names)}
+            elif isinstance(names, dict):
+                for k, v in names.items():
+                    id_to_name[int(k)] = str(v)
+            name_to_id = {v: k for k, v in id_to_name.items()}
+            return name_to_id, id_to_name
+        except Exception as e:
+            self.log_line(f'Warning: could not parse dataset.yaml for class map: {e}')
+            return {}, {}
+
+    def suggest_class_id(self, class_name: str):
+        name = class_name.strip()
+        if not name:
+            return None
+        name_to_id, id_to_name = self.load_dataset_class_map()
+        if name in name_to_id:
+            return name_to_id[name]
+
+        used = set(id_to_name.keys())
+        i = 0
+        while i in used:
+            i += 1
+        return i
+
+    def auto_assign_class_id(self, class_var: tk.StringVar, id_var: tk.StringVar):
+        cid = self.suggest_class_id(class_var.get())
+        if cid is not None:
+            id_var.set(str(cid))
+
     def refresh_class_options(self):
         data_images = ROOT / 'data' / 'images'
         names = []
         if data_images.exists():
             names = sorted([p.name for p in data_images.iterdir() if p.is_dir()])
+
+        name_to_id, _ = self.load_dataset_class_map()
+        for n in sorted(name_to_id.keys()):
+            if n not in names:
+                names.append(n)
+
         if not names:
             names = ['object_name']
         self.class_choices = names
@@ -138,6 +187,7 @@ class App(tk.Tk):
         self.mask_quality_var = tk.StringVar(value='high')
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
+        self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.video_var, width=70).grid(row=0, column=1, sticky='we')
@@ -191,6 +241,7 @@ class App(tk.Tk):
         self.synth_min_scale_var = tk.StringVar(value='0.55')
         self.synth_max_scale_var = tk.StringVar(value='1.25')
         self.synth_rot_var = tk.StringVar(value='25')
+        self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
         self.synth_class_cb = ttk.Combobox(frm, textvariable=self.synth_class_var)
@@ -232,6 +283,7 @@ class App(tk.Tk):
         self.obs_overlap_var = tk.StringVar(value='0.8')
         self.obs_scale_var = tk.StringVar(value='0.8')
         self.obs_white_prob_var = tk.StringVar(value='0.10')
+        self.obs_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
         self.obs_class_cb = ttk.Combobox(frm, textvariable=self.obs_class_var)
@@ -282,6 +334,7 @@ class App(tk.Tk):
         self.manual_class_id_var = tk.StringVar(value='0')
         self.manual_samples_var = tk.StringVar(value='80')
         self.manual_prefix_var = tk.StringVar(value='manual')
+        self.manual_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.manual_video_var, width=70).grid(row=0, column=1, sticky='we')
