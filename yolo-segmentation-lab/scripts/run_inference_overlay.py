@@ -2,7 +2,6 @@
 import argparse
 from pathlib import Path
 from datetime import datetime
-import numpy as np
 from ultralytics import YOLO
 import cv2
 
@@ -14,8 +13,8 @@ def main():
     ap.add_argument('--imgsz', type=int, default=640)
     ap.add_argument('--conf', type=float, default=0.25)
     ap.add_argument('--device', default='0')
-    ap.add_argument('--view-width', type=int, default=1280, help='Max overlay window width')
-    ap.add_argument('--view-height', type=int, default=720, help='Max overlay window height')
+    ap.add_argument('--view-width', type=int, default=1920, help='Max overlay window width')
+    ap.add_argument('--view-height', type=int, default=1080, help='Max overlay window height')
     ap.add_argument('--save-video', action='store_true', help='Save displayed overlay video')
     ap.add_argument('--save-path', default='', help='Output video path (.mp4). If empty, auto path in runs/predict_overlay')
     ap.add_argument('--save-fps', type=float, default=20.0, help='Fallback FPS for saved output')
@@ -50,23 +49,30 @@ def main():
             return frame, 0
 
         frame = r.orig_img.copy()
+        overlay = frame.copy()
         count = 0
-        if r.masks is not None:
-            masks = r.masks.data.cpu().numpy()
-            count = int(masks.shape[0])
-            for i, m in enumerate(masks):
-                color = np.array(palette[i % len(palette)], dtype=np.uint8)
-                mm = (m > 0.5)
-                if mm.shape[:2] != frame.shape[:2]:
-                    mm = cv2.resize(mm.astype(np.uint8), (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST) > 0
-                overlay = frame.copy()
-                overlay[mm] = (0.55 * overlay[mm] + 0.45 * color).astype(np.uint8)
-                frame = overlay
 
-                ys, xs = np.where(mm)
-                if len(xs) > 0:
-                    cx, cy = int(xs.mean()), int(ys.mean())
-                    cv2.putText(frame, str(i + 1), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, tuple(int(x) for x in color), 2, cv2.LINE_AA)
+        if r.masks is not None and getattr(r.masks, 'xy', None) is not None:
+            polys = r.masks.xy
+            count = len(polys)
+            for i, poly in enumerate(polys):
+                color = palette[i % len(palette)]
+                if poly is None or len(poly) < 3:
+                    continue
+                pts = poly.astype('int32').reshape(-1, 1, 2)
+                cv2.fillPoly(overlay, [pts], color)
+
+            # Blend once to preserve image quality (avoid repeated resampling)
+            frame = cv2.addWeighted(frame, 0.62, overlay, 0.38, 0.0)
+
+            for i, poly in enumerate(polys):
+                color = palette[i % len(palette)]
+                if poly is None or len(poly) < 3:
+                    continue
+                pts = poly.astype('int32').reshape(-1, 1, 2)
+                cv2.polylines(frame, [pts], True, color, 2, cv2.LINE_AA)
+                cx, cy = int(poly[:, 0].mean()), int(poly[:, 1].mean())
+                cv2.putText(frame, str(i + 1), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
 
         cv2.putText(frame, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
         return frame, count
