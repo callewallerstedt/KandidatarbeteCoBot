@@ -42,8 +42,8 @@ def foreground_mask_rembg(frame_bgr):
     return mask
 
 
-def foreground_mask_yolo(frame_bgr, model, class_id, conf=0.20):
-    r = model.predict(frame_bgr, conf=conf, verbose=False)[0]
+def foreground_mask_yolo(frame_bgr, model, class_id, conf=0.20, imgsz=640, device='0'):
+    r = model.predict(frame_bgr, conf=conf, imgsz=imgsz, device=device, verbose=False)[0]
     if r.masks is None or r.boxes is None or len(r.boxes) == 0:
         return None
 
@@ -74,6 +74,8 @@ def main():
     ap.add_argument('--init-source', choices=['rembg', 'yolo'], default='yolo')
     ap.add_argument('--weights', default=str(Path(__file__).resolve().parents[1] / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
     ap.add_argument('--init-conf', type=float, default=0.20)
+    ap.add_argument('--imgsz', type=int, default=640)
+    ap.add_argument('--device', default='0')
     args = ap.parse_args()
 
     root = Path(args.data_root)
@@ -117,7 +119,14 @@ def main():
             continue
 
         if args.init_source == 'yolo':
-            mask = foreground_mask_yolo(frame, yolo_model, class_id=args.class_id, conf=args.init_conf)
+            mask = foreground_mask_yolo(
+                frame,
+                yolo_model,
+                class_id=args.class_id,
+                conf=args.init_conf,
+                imgsz=args.imgsz,
+                device=args.device,
+            )
             if mask is None:
                 idx += 1
                 continue

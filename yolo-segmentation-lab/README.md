@@ -47,7 +47,7 @@ py -3.11 -m venv .venv
 
 ## Manual reviewer usability
 - Manual prep can use YOLO weights for better initial masks (`source=yolo`) or rembg fallback.
-- You can choose init weights and confidence from the GUI manual tab.
+- You can choose init weights, confidence, image size, and device from the GUI manual tab (same style as inference settings).
 - Drawing is smoother (line interpolation instead of sparse dots).
 - Zoom controls added (`z` in, `x` out).
 

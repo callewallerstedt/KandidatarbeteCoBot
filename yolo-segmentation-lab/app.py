@@ -456,6 +456,8 @@ class App(tk.Tk):
         self.manual_init_source_var = tk.StringVar(value='yolo')
         self.manual_init_weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
         self.manual_init_conf_var = tk.StringVar(value='0.20')
+        self.manual_init_imgsz_var = tk.StringVar(value='640')
+        self.manual_init_device_var = tk.StringVar(value='0')
         self.manual_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var))
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
@@ -486,10 +488,16 @@ class App(tk.Tk):
         ttk.Label(frm, text='Init conf').grid(row=7, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.manual_init_conf_var, width=10).grid(row=7, column=1, sticky='w')
 
-        ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=8, column=0, pady=8)
-        ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=8, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Init image size').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_init_imgsz_var, width=10).grid(row=8, column=1, sticky='w')
 
-        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=9, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Init device').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.manual_init_device_var, width=10).grid(row=9, column=1, sticky='w')
+
+        ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=10, column=0, pady=8)
+        ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=10, column=1, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=11, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_train_tab(self):
@@ -794,6 +802,8 @@ class App(tk.Tk):
             '--prefix', self.manual_prefix_var.get(),
             '--init-source', self.manual_init_source_var.get(),
             '--init-conf', self.manual_init_conf_var.get(),
+            '--imgsz', self.manual_init_imgsz_var.get(),
+            '--device', self.manual_init_device_var.get(),
         ]
         if self.manual_init_source_var.get() == 'yolo' and self.manual_init_weights_var.get().strip():
             cmd.extend(['--weights', self.manual_init_weights_var.get().strip()])
