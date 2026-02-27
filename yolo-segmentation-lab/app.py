@@ -346,6 +346,8 @@ class App(tk.Tk):
         self.synth_rot_var = tk.StringVar(value='25')
         self.synth_bri_min_var = tk.StringVar(value='-20')
         self.synth_bri_max_var = tk.StringVar(value='20')
+        self.synth_obj_bri_min_var = tk.StringVar(value='-10')
+        self.synth_obj_bri_max_var = tk.StringVar(value='10')
         self.synth_run_var = tk.StringVar(value='')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
@@ -373,17 +375,23 @@ class App(tk.Tk):
         ttk.Label(frm, text='Max rotation deg').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_rot_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Label(frm, text='Brightness min (beta)').grid(row=7, column=0, sticky='w')
+        ttk.Label(frm, text='Background brightness min (beta)').grid(row=7, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_bri_min_var).grid(row=7, column=1, sticky='we')
 
-        ttk.Label(frm, text='Brightness max (beta)').grid(row=8, column=0, sticky='w')
+        ttk.Label(frm, text='Background brightness max (beta)').grid(row=8, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_bri_max_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Synth run name (optional)').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='Object brightness min (beta)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_obj_bri_min_var).grid(row=9, column=1, sticky='we')
 
-        ttk.Button(frm, text='Preview synth settings (min/max)', command=self.preview_synth).grid(row=10, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=10, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Object brightness max (beta)').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_obj_bri_max_var).grid(row=10, column=1, sticky='we')
+
+        ttk.Label(frm, text='Synth run name (optional)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=11, column=1, sticky='we')
+
+        ttk.Button(frm, text='Preview synth settings (min/max)', command=self.preview_synth).grid(row=12, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=12, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -786,6 +794,8 @@ class App(tk.Tk):
             '--max-rotation', self.synth_rot_var.get(),
             '--brightness-min', self.synth_bri_min_var.get(),
             '--brightness-max', self.synth_bri_max_var.get(),
+            '--object-brightness-min', self.synth_obj_bri_min_var.get(),
+            '--object-brightness-max', self.synth_obj_bri_max_var.get(),
         ]
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])

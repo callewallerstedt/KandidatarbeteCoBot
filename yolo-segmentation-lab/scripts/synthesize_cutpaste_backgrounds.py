@@ -80,7 +80,7 @@ def rotate_bound_pair(img, mask, angle):
     return rot_img, rot_mask
 
 
-def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_beta=None):
+def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fixed_obj_beta=None):
     im_path, lb_path = random.choice(pairs)
     src = cv2.imread(str(im_path))
     if src is None:
@@ -122,13 +122,16 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_beta=None):
     px = random.randint(0, w - ow)
     py = random.randint(0, h - oh)
 
+    obj_beta = fixed_obj_beta if fixed_obj_beta is not None else random.uniform(args.object_brightness_min, args.object_brightness_max)
+    crop_rr = cv2.convertScaleAbs(crop_rr, alpha=1.0, beta=obj_beta)
+
     roi = bg[py:py + oh, px:px + ow]
     alpha = (m_rr > 0)
     roi[alpha] = crop_rr[alpha]
     bg[py:py + oh, px:px + ow] = roi
 
-    beta = fixed_beta if fixed_beta is not None else random.uniform(args.brightness_min, args.brightness_max)
-    bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=beta)
+    bg_beta = fixed_bg_beta if fixed_bg_beta is not None else random.uniform(args.brightness_min, args.brightness_max)
+    bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
 
     full_mask = np.zeros((h, w), dtype=np.uint8)
     full_mask[py:py + oh, px:px + ow] = m_rr
@@ -143,7 +146,8 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_beta=None):
         'h': h,
         'cls_id': args.class_id if cls_id is None else cls_id,
         'scale': scale,
-        'beta': beta,
+        'bg_beta': bg_beta,
+        'obj_beta': obj_beta,
     }
 
 
@@ -157,8 +161,10 @@ def main():
     ap.add_argument('--min-scale', type=float, default=0.55)
     ap.add_argument('--max-scale', type=float, default=1.25)
     ap.add_argument('--max-rotation', type=float, default=25.0)
-    ap.add_argument('--brightness-min', type=float, default=-20.0, help='Min brightness shift (beta)')
-    ap.add_argument('--brightness-max', type=float, default=20.0, help='Max brightness shift (beta)')
+    ap.add_argument('--brightness-min', type=float, default=-20.0, help='Background brightness min shift (beta)')
+    ap.add_argument('--brightness-max', type=float, default=20.0, help='Background brightness max shift (beta)')
+    ap.add_argument('--object-brightness-min', type=float, default=-10.0, help='Object brightness min shift (beta)')
+    ap.add_argument('--object-brightness-max', type=float, default=10.0, help='Object brightness max shift (beta)')
     ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
@@ -203,23 +209,24 @@ def main():
 
     if args.preview_only:
         combos = [
-            (args.min_scale, args.brightness_min, 'min-scale min-bright'),
-            (args.max_scale, args.brightness_min, 'max-scale min-bright'),
-            (args.min_scale, args.brightness_max, 'min-scale max-bright'),
-            (args.max_scale, args.brightness_max, 'max-scale max-bright'),
+            (args.min_scale, args.brightness_min, args.object_brightness_min, 'min-scale | bg min | obj min'),
+            (args.max_scale, args.brightness_min, args.object_brightness_max, 'max-scale | bg min | obj max'),
+            (args.min_scale, args.brightness_max, args.object_brightness_min, 'min-scale | bg max | obj min'),
+            (args.max_scale, args.brightness_max, args.object_brightness_max, 'max-scale | bg max | obj max'),
         ]
         previews = []
-        for sc, br, label in combos:
+        for sc, bg_br, obj_br, label in combos:
             sample = None
             for _ in range(20):
-                sample = compose_once(pairs, bg_files, args, fixed_scale=sc, fixed_beta=br)
+                sample = compose_once(pairs, bg_files, args, fixed_scale=sc, fixed_bg_beta=bg_br, fixed_obj_beta=obj_br)
                 if sample is not None:
                     break
             if sample is None:
                 continue
             vis = sample['image'].copy()
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-            cv2.putText(vis, f'{label} | scale={sc:.2f}, beta={br:.1f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'{label} | scale={sc:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'bg_beta={bg_br:.1f} obj_beta={obj_br:.1f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
             previews.append(vis)
 
         if not previews:

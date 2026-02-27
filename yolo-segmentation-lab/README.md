@@ -44,7 +44,7 @@ py -3.11 -m venv .venv
   - `data/images/<class>/obs_runs/<run_name>/`
   - matching label folders under `data/labels/...`
 - Build split can filter to a specific run via run filter.
-- Synthetic BG tab includes brightness min/max controls.
+- Synthetic BG tab includes separate brightness min/max controls for background and masked object.
 
 ## Manual reviewer usability
 - Manual prep can use YOLO weights for better initial masks (`source=yolo`) or rembg fallback.
