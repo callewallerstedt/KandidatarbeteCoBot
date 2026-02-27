@@ -908,7 +908,7 @@ class App(tk.Tk):
         frm = self.tab_infer
         self.weights_var = tk.StringVar(value=str(ROOT / 'runs' / 'segment' / 'train' / 'weights' / 'best.pt'))
         self.source_var = tk.StringVar(value='0')
-        self.infer_imgsz_var = tk.StringVar(value='960')
+        self.infer_imgsz_var = tk.StringVar(value='1280')
         self.infer_conf_var = tk.StringVar(value='0.25')
         self.infer_device_var = tk.StringVar(value='0')
         self.view_w_var = tk.StringVar(value='1920')

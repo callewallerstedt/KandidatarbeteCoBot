@@ -11,7 +11,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--weights', required=True)
     ap.add_argument('--source', default='0', help='0 for webcam, or video path')
-    ap.add_argument('--imgsz', type=int, default=640)
+    ap.add_argument('--imgsz', type=int, default=1280)
     ap.add_argument('--conf', type=float, default=0.25)
     ap.add_argument('--device', default='0')
     ap.add_argument('--view-width', type=int, default=1920, help='Max overlay window width')
