@@ -35,7 +35,7 @@ py -3.11 -m venv .venv
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
-- Inference
+- Inference (including explicit webcam capture resolution controls, e.g. 1920x1080)
 
 ## Synthetic run folders
 - New synthetic and obstruction generations are stored in per-run folders:

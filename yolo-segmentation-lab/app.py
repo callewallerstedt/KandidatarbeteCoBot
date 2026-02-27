@@ -598,6 +598,8 @@ class App(tk.Tk):
         self.infer_device_var = tk.StringVar(value='0')
         self.view_w_var = tk.StringVar(value='1280')
         self.view_h_var = tk.StringVar(value='720')
+        self.cam_w_var = tk.StringVar(value='1920')
+        self.cam_h_var = tk.StringVar(value='1080')
         self.save_video_var = tk.BooleanVar(value=False)
         self.save_path_var = tk.StringVar(value='')
 
@@ -624,11 +626,17 @@ class App(tk.Tk):
         ttk.Label(frm, text='View height (max)').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.view_h_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Checkbutton(frm, text='Save overlay video', variable=self.save_video_var).grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.save_path_var, width=70).grid(row=7, column=1, sticky='we')
-        ttk.Button(frm, text='Save As', command=self.pick_save_video).grid(row=7, column=2)
+        ttk.Label(frm, text='Camera width (source=0)').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.cam_w_var).grid(row=7, column=1, sticky='we')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=8, column=0, pady=8)
+        ttk.Label(frm, text='Camera height (source=0)').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.cam_h_var).grid(row=8, column=1, sticky='we')
+
+        ttk.Checkbutton(frm, text='Save overlay video', variable=self.save_video_var).grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.save_path_var, width=70).grid(row=9, column=1, sticky='we')
+        ttk.Button(frm, text='Save As', command=self.pick_save_video).grid(row=9, column=2)
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=10, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -975,6 +983,8 @@ class App(tk.Tk):
             '--device', self.infer_device_var.get(),
             '--view-width', self.view_w_var.get(),
             '--view-height', self.view_h_var.get(),
+            '--cam-width', self.cam_w_var.get(),
+            '--cam-height', self.cam_h_var.get(),
         ]
         if self.save_video_var.get():
             cmd.append('--save-video')

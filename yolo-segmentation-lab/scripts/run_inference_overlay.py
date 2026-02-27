@@ -18,6 +18,8 @@ def main():
     ap.add_argument('--save-video', action='store_true', help='Save displayed overlay video')
     ap.add_argument('--save-path', default='', help='Output video path (.mp4). If empty, auto path in runs/predict_overlay')
     ap.add_argument('--save-fps', type=float, default=20.0, help='Fallback FPS for saved output')
+    ap.add_argument('--cam-width', type=int, default=1920, help='Requested webcam capture width')
+    ap.add_argument('--cam-height', type=int, default=1080, help='Requested webcam capture height')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
@@ -29,8 +31,8 @@ def main():
     writer = None
     save_path = None
 
-    for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device):
-        frame = r.plot()
+    def show_and_maybe_save(frame):
+        nonlocal writer, save_path
         h, w = frame.shape[:2]
         scale = min(args.view_width / max(w, 1), args.view_height / max(h, 1), 1.0)
         if scale < 1.0:
@@ -51,8 +53,32 @@ def main():
             writer.write(frame)
 
         cv2.imshow(win, frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        return (cv2.waitKey(1) & 0xFF) == ord('q')
+
+    if source == 0:
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            raise RuntimeError('Cannot open webcam source 0')
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.cam_width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.cam_height)
+
+        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        print(f'Webcam capture resolution requested: {args.cam_width}x{args.cam_height}')
+        print(f'Webcam capture resolution actual: {actual_w}x{actual_h}')
+
+        while True:
+            ok, raw = cap.read()
+            if not ok:
+                break
+            r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, verbose=False)[0]
+            if show_and_maybe_save(r.plot()):
+                break
+        cap.release()
+    else:
+        for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device):
+            if show_and_maybe_save(r.plot()):
+                break
 
     if writer is not None:
         writer.release()
