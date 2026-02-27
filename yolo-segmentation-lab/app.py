@@ -564,6 +564,8 @@ class App(tk.Tk):
         self.synth_all_obs_overlap_max_var = tk.StringVar(value='1.1')
         self.synth_all_obs_scale_min_var = tk.StringVar(value='0.7')
         self.synth_all_obs_scale_max_var = tk.StringVar(value='1.0')
+        self.synth_all_obj_scale_min_var = tk.StringVar(value='0.85')
+        self.synth_all_obj_scale_max_var = tk.StringVar(value='1.15')
         self.synth_all_obs_white_prob_var = tk.StringVar(value='0.10')
 
         self.synth_all_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_all_class_var, self.synth_all_class_id_var))
@@ -644,15 +646,18 @@ class App(tk.Tk):
         ttk.Label(frm, text='Obstruction scale min/max').grid(row=26, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_obs_scale_min_var, width=6).grid(row=26, column=1, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_obs_scale_max_var, width=6).grid(row=26, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='White-bg prob').grid(row=27, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=27, column=1, sticky='w')
-        ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=27, column=2, sticky='w')
+        ttk.Label(frm, text='Base object scale min/max').grid(row=27, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_min_var, width=6).grid(row=27, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_max_var, width=6).grid(row=27, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='White-bg prob').grid(row=28, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=28, column=1, sticky='w')
+        ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=28, column=2, sticky='w')
 
-        ttk.Label(frm, text='Preview count (all previews)').grid(row=28, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_preview_count_var, width=8).grid(row=28, column=1, sticky='w')
+        ttk.Label(frm, text='Preview count (all previews)').grid(row=29, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_preview_count_var, width=8).grid(row=29, column=1, sticky='w')
 
-        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=29, column=0, pady=10)
-        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=30, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=30, column=0, pady=10)
+        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=31, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -667,6 +672,8 @@ class App(tk.Tk):
         self.obs_rot_dev_var = tk.StringVar(value='20')
         self.obs_overlap_var = tk.StringVar(value='0.8')
         self.obs_scale_var = tk.StringVar(value='0.8')
+        self.obs_obj_scale_min_var = tk.StringVar(value='0.85')
+        self.obs_obj_scale_max_var = tk.StringVar(value='1.15')
         self.obs_white_prob_var = tk.StringVar(value='0.10')
         self.obs_preview_count_var = tk.StringVar(value='12')
         self.obs_run_var = tk.StringVar(value='')
@@ -706,18 +713,22 @@ class App(tk.Tk):
         ttk.Label(frm, text='Obstruction scale vs object height').grid(row=9, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_scale_var).grid(row=9, column=1, sticky='we')
 
-        ttk.Label(frm, text='Keep original white-table background probability (e.g. 0.10)').grid(row=10, column=0, sticky='w')
+        ttk.Label(frm, text='Base object scale min/max (random BG)').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_obj_scale_min_var, width=8).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_obj_scale_max_var, width=8).grid(row=10, column=1, padx=(70,0), sticky='w')
+
+        ttk.Label(frm, text='Keep original white-table background probability (e.g. 0.10)').grid(row=11, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_white_prob_var).grid(row=10, column=1, sticky='we')
 
-        ttk.Label(frm, text='Obstruction run name (optional)').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_run_var).grid(row=11, column=1, sticky='we')
+        ttk.Label(frm, text='Obstruction run name (optional)').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_run_var).grid(row=12, column=1, sticky='we')
 
-        ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_preview_count_var, width=10).grid(row=12, column=1, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_preview_count_var, width=10).grid(row=13, column=1, sticky='w')
 
-        ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=13, column=0, pady=8)
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=13, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=14, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=14, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=14, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=15, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_cutout_tab(self):
@@ -1287,6 +1298,8 @@ class App(tk.Tk):
             '--overlap-max', self.synth_all_obs_overlap_max_var.get(),
             '--obstruction-scale-min', self.synth_all_obs_scale_min_var.get(),
             '--obstruction-scale-max', self.synth_all_obs_scale_max_var.get(),
+            '--object-scale-min', self.synth_all_obj_scale_min_var.get(),
+            '--object-scale-max', self.synth_all_obj_scale_max_var.get(),
             '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
             '--run-name', f'{base}_obs_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
@@ -1375,6 +1388,8 @@ class App(tk.Tk):
                     '--overlap-max', self.synth_all_obs_overlap_max_var.get(),
                     '--obstruction-scale-min', self.synth_all_obs_scale_min_var.get(),
                     '--obstruction-scale-max', self.synth_all_obs_scale_max_var.get(),
+                    '--object-scale-min', self.synth_all_obj_scale_min_var.get(),
+                    '--object-scale-max', self.synth_all_obj_scale_max_var.get(),
                     '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
                     '--run-name', f'{base}_obs',
                 ]
@@ -1413,6 +1428,8 @@ class App(tk.Tk):
             '--obstruction-dir', self.obs_dir_var.get(),
             '--background-dir', self.obs_bg_dir_var.get(),
             '--white-bg-prob', self.obs_white_prob_var.get(),
+            '--object-scale-min', self.obs_obj_scale_min_var.get(),
+            '--object-scale-max', self.obs_obj_scale_max_var.get(),
             '--entry-angle-min', self.obs_angle_min_var.get(),
             '--entry-angle-max', self.obs_angle_max_var.get(),
             '--rotation-deviation', self.obs_rot_dev_var.get(),

@@ -140,6 +140,8 @@ def main():
     ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Fixed obstruction scale (legacy single value)')
     ap.add_argument('--obstruction-scale-min', type=float, default=None, help='Min obstruction scale')
     ap.add_argument('--obstruction-scale-max', type=float, default=None, help='Max obstruction scale')
+    ap.add_argument('--object-scale-min', type=float, default=0.85, help='Min scale for base object placement on random background')
+    ap.add_argument('--object-scale-max', type=float, default=1.15, help='Max scale for base object placement on random background')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-count', type=int, default=12)
@@ -210,7 +212,7 @@ def main():
             placed_obj_mask = obj_mask_full.copy()
         else:
             base = pick_random_background(bg_files, w, h)
-            scale = random.uniform(0.85, 1.15)
+            scale = random.uniform(min(args.object_scale_min, args.object_scale_max), max(args.object_scale_min, args.object_scale_max))
             tw = max(8, int(bw * scale))
             th = max(8, int(bh * scale))
             obj_r = cv2.resize(obj_crop, (tw, th), interpolation=cv2.INTER_LINEAR)
