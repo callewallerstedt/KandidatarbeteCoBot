@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog
+from tkinter.scrolledtext import ScrolledText
 
 ROOT = Path(__file__).resolve().parent
 PY = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -25,12 +26,14 @@ class App(tk.Tk):
         notebook = ttk.Notebook(self)
         notebook.pack(fill='x')
 
+        self.tab_instructions = ttk.Frame(notebook)
         self.tab_data = ttk.Frame(notebook)
         self.tab_synth = ttk.Frame(notebook)
         self.tab_manual = ttk.Frame(notebook)
         self.tab_obstruction = ttk.Frame(notebook)
         self.tab_train = ttk.Frame(notebook)
         self.tab_infer = ttk.Frame(notebook)
+        notebook.add(self.tab_instructions, text='0) Instructions')
         notebook.add(self.tab_data, text='1) Data Prep')
         notebook.add(self.tab_synth, text='2) Synthetic BG')
         notebook.add(self.tab_obstruction, text='3) Obstruction Data')
@@ -38,12 +41,16 @@ class App(tk.Tk):
         notebook.add(self.tab_train, text='5) Train')
         notebook.add(self.tab_infer, text='6) Inference')
 
+        self.class_id_choices = [str(i) for i in range(0, 25)]
+
+        self.build_instructions_tab()
         self.build_data_tab()
         self.build_synth_tab()
         self.build_obstruction_tab()
         self.build_manual_tab()
         self.build_train_tab()
         self.build_infer_tab()
+        self.refresh_class_options()
 
     def log_line(self, text):
         self.log.insert('end', text + '\n')
@@ -70,6 +77,54 @@ class App(tk.Tk):
 
         threading.Thread(target=_target, daemon=True).start()
 
+    def build_instructions_tab(self):
+        frm = self.tab_instructions
+        txt = ScrolledText(frm, wrap='word', height=20)
+        txt.pack(fill='both', expand=True, padx=8, pady=8)
+        txt.insert('1.0',
+            'YOLO Segmentation Lab – Recommended workflow\n\n'
+            'A) Add a NEW class (incremental multiclass)\n'
+            '1. Go to Data Prep. Enter/select Class name + Class id.\n'
+            '2. Click Auto-label from video to create initial labels.\n'
+            '3. Go to Manual Real Data and run Prepare frames + initial masks, then Open manual mask reviewer and fix bad masks.\n'
+            '4. (Optional) Go to Synthetic BG / Obstruction Data to generate more varied training data for this class.\n'
+            '5. Back in Data Prep: update class list (space-separated, class-id order) and click Update dataset.yaml.\n'
+            '6. Click Build train/val/test split (mode=all recommended).\n'
+            '7. Train tab: use latest runs/.../best.pt to continue training and preserve old classes.\n\n'
+            'B) Add MORE data to an existing class\n'
+            '1. Select existing class name/id.\n'
+            '2. Add new real video labels and/or synthetic data.\n'
+            '3. Build split again (all).\n'
+            '4. Continue training from latest best.pt.\n\n'
+            'C) Retrain safely without forgetting old classes\n'
+            '- Always train with mixed dataset containing old + new classes.\n'
+            '- Do NOT train only on newest class data.\n\n'
+            'D) Mask quality tips\n'
+            '- If auto labels look jagged, increase Image size in Train tab (e.g. 960/1280).\n'
+            '- Use Manual Real Data reviewer to clean edges on hard samples.\n'
+            '- Auto-label now supports higher-quality contour mode (less polygon simplification).\n'
+        )
+        txt.configure(state='disabled')
+
+    def refresh_class_options(self):
+        data_images = ROOT / 'data' / 'images'
+        names = []
+        if data_images.exists():
+            names = sorted([p.name for p in data_images.iterdir() if p.is_dir()])
+        if not names:
+            names = ['object_name']
+        self.class_choices = names
+
+        for cb_name in ['data_class_cb', 'synth_class_cb', 'obs_class_cb', 'manual_class_cb']:
+            cb = getattr(self, cb_name, None)
+            if cb is not None:
+                cb['values'] = self.class_choices
+
+        for cb_name in ['data_class_id_cb', 'synth_class_id_cb', 'obs_class_id_cb', 'manual_class_id_cb']:
+            cb = getattr(self, cb_name, None)
+            if cb is not None:
+                cb['values'] = self.class_id_choices
+
     def build_data_tab(self):
         frm = self.tab_data
 
@@ -80,6 +135,7 @@ class App(tk.Tk):
         self.num_samples_var = tk.StringVar(value='120')
         self.max_var = tk.StringVar(value='300')
         self.aug_var = tk.StringVar(value='1')
+        self.mask_quality_var = tk.StringVar(value='high')
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
 
@@ -88,10 +144,12 @@ class App(tk.Tk):
         ttk.Button(frm, text='Browse', command=self.pick_video).grid(row=0, column=2)
 
         ttk.Label(frm, text='Class name').grid(row=1, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.class_var).grid(row=1, column=1, sticky='we')
+        self.data_class_cb = ttk.Combobox(frm, textvariable=self.class_var)
+        self.data_class_cb.grid(row=1, column=1, sticky='we')
 
         ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.class_id_var).grid(row=2, column=1, sticky='we')
+        self.data_class_id_cb = ttk.Combobox(frm, textvariable=self.class_id_var, values=self.class_id_choices, width=8)
+        self.data_class_id_cb.grid(row=2, column=1, sticky='w')
 
         ttk.Label(frm, text='Target samples (evenly across video)').grid(row=3, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.num_samples_var).grid(row=3, column=1, sticky='we')
@@ -105,19 +163,22 @@ class App(tk.Tk):
         ttk.Label(frm, text='Aug per frame').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.aug_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=7, column=0, pady=8)
+        ttk.Label(frm, text='Mask quality').grid(row=7, column=0, sticky='w')
+        ttk.Combobox(frm, textvariable=self.mask_quality_var, values=['fast', 'high'], state='readonly', width=10).grid(row=7, column=1, sticky='w')
 
-        ttk.Label(frm, text='Split mode').grid(row=7, column=1, sticky='e')
-        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs'], state='readonly', width=10).grid(row=7, column=2, sticky='w')
+        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=8, column=0, pady=8)
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=8, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=9, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='Split mode').grid(row=9, column=1, sticky='e')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs'], state='readonly', width=10).grid(row=9, column=2, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=10, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only *_synth_* | obs = only *_obs_*').grid(row=10, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=11, column=0, pady=8, sticky='w')
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=11, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=11, column=2)
+        ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=13, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=13, column=2)
 
         frm.columnconfigure(1, weight=1)
 
@@ -132,10 +193,12 @@ class App(tk.Tk):
         self.synth_rot_var = tk.StringVar(value='25')
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_class_var).grid(row=0, column=1, sticky='we')
+        self.synth_class_cb = ttk.Combobox(frm, textvariable=self.synth_class_var)
+        self.synth_class_cb.grid(row=0, column=1, sticky='we')
 
         ttk.Label(frm, text='Class id').grid(row=1, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_class_id_var).grid(row=1, column=1, sticky='we')
+        self.synth_class_id_cb = ttk.Combobox(frm, textvariable=self.synth_class_id_var, values=self.class_id_choices, width=8)
+        self.synth_class_id_cb.grid(row=1, column=1, sticky='w')
 
         ttk.Label(frm, text='Background images folder').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
@@ -171,10 +234,12 @@ class App(tk.Tk):
         self.obs_white_prob_var = tk.StringVar(value='0.10')
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_class_var).grid(row=0, column=1, sticky='we')
+        self.obs_class_cb = ttk.Combobox(frm, textvariable=self.obs_class_var)
+        self.obs_class_cb.grid(row=0, column=1, sticky='we')
 
         ttk.Label(frm, text='Class id').grid(row=1, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_class_id_var).grid(row=1, column=1, sticky='we')
+        self.obs_class_id_cb = ttk.Combobox(frm, textvariable=self.obs_class_id_var, values=self.class_id_choices, width=8)
+        self.obs_class_id_cb.grid(row=1, column=1, sticky='w')
 
         ttk.Label(frm, text='Obstruction folder (contains hands/arms subfolders)').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_dir_var, width=70).grid(row=2, column=1, sticky='we')
@@ -223,10 +288,12 @@ class App(tk.Tk):
         ttk.Button(frm, text='Browse', command=self.pick_manual_video).grid(row=0, column=2)
 
         ttk.Label(frm, text='Class name').grid(row=1, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.manual_class_var).grid(row=1, column=1, sticky='we')
+        self.manual_class_cb = ttk.Combobox(frm, textvariable=self.manual_class_var)
+        self.manual_class_cb.grid(row=1, column=1, sticky='we')
 
         ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.manual_class_id_var).grid(row=2, column=1, sticky='we')
+        self.manual_class_id_cb = ttk.Combobox(frm, textvariable=self.manual_class_id_var, values=self.class_id_choices, width=8)
+        self.manual_class_id_cb.grid(row=2, column=1, sticky='w')
 
         ttk.Label(frm, text='Evenly sampled frames').grid(row=3, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.manual_samples_var).grid(row=3, column=1, sticky='we')
@@ -286,6 +353,7 @@ class App(tk.Tk):
 
         ttk.Label(frm, text='Source (0 webcam or video path)').grid(row=1, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.source_var).grid(row=1, column=1, sticky='we')
+        ttk.Button(frm, text='Browse video', command=self.pick_infer_source).grid(row=1, column=2)
 
         ttk.Label(frm, text='Image size').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.infer_imgsz_var).grid(row=2, column=1, sticky='we')
@@ -318,6 +386,11 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select weights', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
             self.weights_var.set(p)
+
+    def pick_infer_source(self):
+        p = filedialog.askopenfilename(title='Select inference video source')
+        if p:
+            self.source_var.set(p)
 
     def pick_train_model(self):
         p = filedialog.askopenfilename(title='Select model/weights for training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
@@ -360,8 +433,10 @@ class App(tk.Tk):
             '--every', self.every_var.get(),
             '--max-frames', self.max_var.get(),
             '--aug-per-frame', self.aug_var.get(),
+            '--mask-quality', self.mask_quality_var.get(),
         ]
         self.run_cmd(cmd)
+        self.after(1000, self.refresh_class_options)
 
     def generate_synth(self):
         if not self.bg_dir_var.get().strip():
@@ -446,6 +521,7 @@ class App(tk.Tk):
             self.log_line('No classes provided')
             return
         self.run_cmd([str(PY), 'scripts/update_dataset_yaml.py', '--classes', *classes])
+        self.after(500, self.refresh_class_options)
 
     def train(self):
         cmd = [

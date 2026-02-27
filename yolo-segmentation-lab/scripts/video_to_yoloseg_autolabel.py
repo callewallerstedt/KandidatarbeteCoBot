@@ -7,7 +7,7 @@ import numpy as np
 from rembg import remove
 
 
-def mask_to_polygon(mask, eps=0.003):
+def mask_to_polygon(mask, eps=0.0015):
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
         return None
@@ -38,7 +38,7 @@ def augment(img):
     return out
 
 
-def foreground_mask_bgr(frame_bgr):
+def foreground_mask_bgr(frame_bgr, quality='high'):
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     out = remove(frame_rgb)
     # rembg can return RGBA
@@ -47,10 +47,18 @@ def foreground_mask_bgr(frame_bgr):
     else:
         gray = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
         _, alpha = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    _, mask = cv2.threshold(alpha, 127, 255, cv2.THRESH_BINARY)
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    if quality == 'high':
+        alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
+        _, mask = cv2.threshold(alpha, 100, 255, cv2.THRESH_BINARY)
+        kernel_open = np.ones((3, 3), np.uint8)
+        kernel_close = np.ones((7, 7), np.uint8)
+    else:
+        _, mask = cv2.threshold(alpha, 127, 255, cv2.THRESH_BINARY)
+        kernel_open = np.ones((5, 5), np.uint8)
+        kernel_close = np.ones((5, 5), np.uint8)
+
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close)
     return mask
 
 
@@ -66,6 +74,8 @@ def main():
     ap.add_argument('--aug-per-frame', type=int, default=1)
     ap.add_argument('--min-area-ratio', type=float, default=0.01)
     ap.add_argument('--max-area-ratio', type=float, default=0.80)
+    ap.add_argument('--mask-quality', choices=['fast', 'high'], default='high')
+    ap.add_argument('--poly-eps', type=float, default=0.0015, help='Polygon simplification ratio; smaller = more detail')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -112,13 +122,13 @@ def main():
 
         for a in range(args.aug_per_frame + 1):
             img = frame if a == 0 else augment(frame)
-            mask = foreground_mask_bgr(img)
+            mask = foreground_mask_bgr(img, quality=args.mask_quality)
             h, w = mask.shape
             area = float((mask > 0).sum()) / float(h * w)
             if area < args.min_area_ratio or area > args.max_area_ratio:
                 continue
 
-            poly = mask_to_polygon(mask)
+            poly = mask_to_polygon(mask, eps=args.poly_eps)
             if poly is None:
                 continue
 

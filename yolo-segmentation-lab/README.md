@@ -25,12 +25,18 @@ py -3.11 -m venv .venv
 
 ## Main app
 `app.py` has tabs for:
-- Data prep (auto-label from video + split mode: all/real/synth/obs)
+- Instructions (step-by-step guide for adding classes, adding more data, and safe retraining)
+- Data prep (auto-label from video + split mode: all/real/synth/obs + mask quality selector)
 - Synthetic BG (cut-paste augmentation from your background folder)
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with live 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training
 - Inference
+
+## Incremental multiclass workflow
+- You can add one object class at a time.
+- Keep class IDs stable and update `dataset.yaml` class list in ID order.
+- Rebuild split with `all` and continue training from latest `runs/.../best.pt` to avoid forgetting old classes.
 
 ## Output structure
 - `data/images/<class>/` extracted frames
