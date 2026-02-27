@@ -418,10 +418,12 @@ class App(tk.Tk):
         self.synth_multi_n_var = tk.StringVar(value='300')
         self.synth_multi_min_obj_var = tk.StringVar(value='2')
         self.synth_multi_max_obj_var = tk.StringVar(value='5')
-        self.synth_multi_overlap_var = tk.StringVar(value='0.5')
+        self.synth_multi_overlap_var = tk.StringVar(value='0.8')
+        self.synth_multi_max_overlap_ratio_var = tk.StringVar(value='0.5')
+        self.synth_multi_cluster_dist_var = tk.StringVar(value='1.0')
         self.synth_multi_min_scale_var = tk.StringVar(value='0.45')
         self.synth_multi_max_scale_var = tk.StringVar(value='1.10')
-        self.synth_multi_overlap_spread_var = tk.StringVar(value='0.35')
+        self.synth_multi_overlap_spread_var = tk.StringVar(value='0.25')
         self.synth_multi_bg_bri_min_var = tk.StringVar(value='-20')
         self.synth_multi_bg_bri_max_var = tk.StringVar(value='20')
         self.synth_multi_obj_bri_min_var = tk.StringVar(value='-10')
@@ -454,32 +456,38 @@ class App(tk.Tk):
         ttk.Label(frm, text='Overlap probability').grid(row=6, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_overlap_var).grid(row=6, column=1, sticky='we')
 
-        ttk.Label(frm, text='Min scale').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_min_scale_var).grid(row=7, column=1, sticky='we')
+        ttk.Label(frm, text='Max overlap ratio (<=0.5)').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_max_overlap_ratio_var).grid(row=7, column=1, sticky='we')
 
-        ttk.Label(frm, text='Max scale').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_max_scale_var).grid(row=8, column=1, sticky='we')
+        ttk.Label(frm, text='Cluster distance factor').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_cluster_dist_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Overlap spread (0 tight overlap, 1 wider)').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_overlap_spread_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='Min scale').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_min_scale_var).grid(row=9, column=1, sticky='we')
 
-        ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_min_var, width=10).grid(row=10, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_max_var, width=10).grid(row=10, column=1)
+        ttk.Label(frm, text='Max scale').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_max_scale_var).grid(row=10, column=1, sticky='we')
 
-        ttk.Label(frm, text='Object brightness min/max').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_min_var, width=10).grid(row=11, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_max_var, width=10).grid(row=11, column=1)
+        ttk.Label(frm, text='Overlap spread (0 tight overlap, 1 wider)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_overlap_spread_var).grid(row=11, column=1, sticky='we')
 
-        ttk.Label(frm, text='Run name (optional)').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=12, column=1, sticky='we')
+        ttk.Label(frm, text='BG brightness min/max').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_min_var, width=8).grid(row=12, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_max_var, width=8).grid(row=12, column=1, padx=(70,0), sticky='w')
 
-        ttk.Label(frm, text='Preview count').grid(row=13, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=13, column=1, sticky='w')
+        ttk.Label(frm, text='Object brightness min/max').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_min_var, width=8).grid(row=13, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_max_var, width=8).grid(row=13, column=1, padx=(70,0), sticky='w')
 
-        ttk.Button(frm, text='Preview multi-instance samples (left/right browse)', command=self.preview_synth_multi).grid(row=14, column=0, pady=8)
-        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=14, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Creates multiple same-class instances per image, including touching/overlapping placements.').grid(row=15, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Run name (optional)').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=14, column=1, sticky='we')
+
+        ttk.Label(frm, text='Preview count').grid(row=15, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=15, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview multi-instance samples (left/right browse)', command=self.preview_synth_multi).grid(row=16, column=0, pady=8)
+        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=16, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Cluster mode: close/touching by default, max overlap enforced.').grid(row=17, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_all_tab(self):
@@ -508,10 +516,12 @@ class App(tk.Tk):
 
         self.synth_all_multi_min_obj_var = tk.StringVar(value='2')
         self.synth_all_multi_max_obj_var = tk.StringVar(value='5')
-        self.synth_all_multi_overlap_var = tk.StringVar(value='0.5')
+        self.synth_all_multi_overlap_var = tk.StringVar(value='0.8')
+        self.synth_all_multi_max_overlap_ratio_var = tk.StringVar(value='0.5')
+        self.synth_all_multi_cluster_dist_var = tk.StringVar(value='1.0')
         self.synth_all_multi_min_scale_var = tk.StringVar(value='0.45')
         self.synth_all_multi_max_scale_var = tk.StringVar(value='1.10')
-        self.synth_all_multi_spread_var = tk.StringVar(value='0.35')
+        self.synth_all_multi_spread_var = tk.StringVar(value='0.25')
 
         self.synth_all_obs_angle_min_var = tk.StringVar(value='0')
         self.synth_all_obs_angle_max_var = tk.StringVar(value='360')
@@ -569,12 +579,16 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_all_multi_max_obj_var, width=8).grid(row=15, column=2, sticky='w')
         ttk.Label(frm, text='Overlap prob').grid(row=16, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_multi_overlap_var, width=8).grid(row=16, column=1, sticky='w')
+        ttk.Label(frm, text='Max overlap ratio').grid(row=16, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_overlap_ratio_var, width=8).grid(row=16, column=2, padx=(120,0), sticky='w')
         ttk.Label(frm, text='Scale min/max').grid(row=17, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=6).grid(row=17, column=1, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=6).grid(row=17, column=1, padx=(58,0), sticky='w')
         ttk.Label(frm, text='Overlap spread (0 tight, 1 spread)').grid(row=18, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_all_multi_spread_var, width=8).grid(row=18, column=1, sticky='w')
-        ttk.Label(frm, text='Rotation fixed: 360').grid(row=18, column=2, sticky='w')
+        ttk.Label(frm, text='Cluster dist factor').grid(row=18, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_cluster_dist_var, width=8).grid(row=18, column=2, padx=(120,0), sticky='w')
+        ttk.Label(frm, text='Rotation fixed: 360').grid(row=19, column=0, sticky='w')
 
         ttk.Button(frm, text='Preview SYNTHETIC MULTI-INSTANCE', command=self.preview_combo_multi).grid(row=19, column=0, sticky='w')
 
@@ -1111,6 +1125,8 @@ class App(tk.Tk):
             '--min-objects', self.synth_multi_min_obj_var.get(),
             '--max-objects', self.synth_multi_max_obj_var.get(),
             '--overlap-prob', self.synth_multi_overlap_var.get(),
+            '--max-overlap-ratio', self.synth_multi_max_overlap_ratio_var.get(),
+            '--cluster-distance-factor', self.synth_multi_cluster_dist_var.get(),
             '--min-scale', self.synth_multi_min_scale_var.get(),
             '--max-scale', self.synth_multi_max_scale_var.get(),
             '--max-rotation', '360',
@@ -1197,6 +1213,8 @@ class App(tk.Tk):
             '--min-objects', self.synth_all_multi_min_obj_var.get(),
             '--max-objects', self.synth_all_multi_max_obj_var.get(),
             '--overlap-prob', self.synth_all_multi_overlap_var.get(),
+            '--max-overlap-ratio', self.synth_all_multi_max_overlap_ratio_var.get(),
+            '--cluster-distance-factor', self.synth_all_multi_cluster_dist_var.get(),
             '--overlap-spread', self.synth_all_multi_spread_var.get(),
             '--min-scale', self.synth_all_multi_min_scale_var.get(),
             '--max-scale', self.synth_all_multi_max_scale_var.get(),
@@ -1286,6 +1304,8 @@ class App(tk.Tk):
                 '--min-objects', self.synth_all_multi_min_obj_var.get(),
                 '--max-objects', self.synth_all_multi_max_obj_var.get(),
                 '--overlap-prob', self.synth_all_multi_overlap_var.get(),
+                '--max-overlap-ratio', self.synth_all_multi_max_overlap_ratio_var.get(),
+                '--cluster-distance-factor', self.synth_all_multi_cluster_dist_var.get(),
                 '--overlap-spread', self.synth_all_multi_spread_var.get(),
                 '--min-scale', self.synth_all_multi_min_scale_var.get(),
                 '--max-scale', self.synth_all_multi_max_scale_var.get(),

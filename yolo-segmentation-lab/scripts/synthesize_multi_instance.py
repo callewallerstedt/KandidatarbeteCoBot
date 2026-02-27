@@ -92,7 +92,9 @@ def main():
     ap.add_argument('--num-synthetic', type=int, default=300)
     ap.add_argument('--min-objects', type=int, default=2)
     ap.add_argument('--max-objects', type=int, default=5)
-    ap.add_argument('--overlap-prob', type=float, default=0.5)
+    ap.add_argument('--overlap-prob', type=float, default=0.8)
+    ap.add_argument('--max-overlap-ratio', type=float, default=0.5, help='Maximum allowed overlap ratio between any two object masks')
+    ap.add_argument('--cluster-distance-factor', type=float, default=1.0, help='Max center distance in object-size units to keep cluster tight')
     ap.add_argument('--min-scale', type=float, default=0.45)
     ap.add_argument('--max-scale', type=float, default=1.10)
     ap.add_argument('--max-rotation', type=float, default=360.0)
@@ -168,6 +170,7 @@ def main():
         nobj = random.randint(max(1, args.min_objects), max(args.min_objects, args.max_objects))
 
         visible_masks = []
+        centers = []
         for _ in range(nobj):
             cls_id, crop, crop_m = random.choice(cutouts)
             ch, cw = crop_m.shape[:2]
@@ -189,27 +192,66 @@ def main():
             if ow >= w or oh >= h:
                 continue
 
-            if visible_masks and random.random() < args.overlap_prob:
-                prev = random.choice(visible_masks)
-                pyx = np.column_stack(np.where(prev > 0))
-                if len(pyx) > 0:
-                    yy, xx = pyx[random.randrange(len(pyx))]
-                    jx = int(random.uniform(-1, 1) * args.overlap_spread * ow)
-                    jy = int(random.uniform(-1, 1) * args.overlap_spread * oh)
-                    px = int(np.clip(xx - ow // 2 + jx, 0, w - ow))
-                    py = int(np.clip(yy - oh // 2 + jy, 0, h - oh))
+            placed = False
+            new_full = None
+            for _try in range(40):
+                if visible_masks:
+                    # Keep cluster tight around existing centers.
+                    if random.random() < args.overlap_prob:
+                        prev = random.choice(visible_masks)
+                        pyx = np.column_stack(np.where(prev > 0))
+                        if len(pyx) > 0:
+                            yy, xx = pyx[random.randrange(len(pyx))]
+                            jx = int(random.uniform(-1, 1) * args.overlap_spread * ow)
+                            jy = int(random.uniform(-1, 1) * args.overlap_spread * oh)
+                            px = int(np.clip(xx - ow // 2 + jx, 0, w - ow))
+                            py = int(np.clip(yy - oh // 2 + jy, 0, h - oh))
+                        else:
+                            px = random.randint(0, w - ow)
+                            py = random.randint(0, h - oh)
+                    else:
+                        # Side-by-side/touching tendency near cluster center
+                        cx, cy = centers[random.randrange(len(centers))]
+                        dmax = int(args.cluster_distance_factor * max(ow, oh))
+                        jx = random.randint(-dmax, dmax)
+                        jy = random.randint(-dmax, dmax)
+                        px = int(np.clip(cx - ow // 2 + jx, 0, w - ow))
+                        py = int(np.clip(cy - oh // 2 + jy, 0, h - oh))
                 else:
                     px = random.randint(0, w - ow)
                     py = random.randint(0, h - oh)
-            else:
-                px = random.randint(0, w - ow)
-                py = random.randint(0, h - oh)
+
+                cand = np.zeros((h, w), dtype=np.uint8)
+                cand[py:py + oh, px:px + ow][m_rr > 0] = 255
+
+                # Enforce max overlap (<= 50% default) with every existing instance.
+                ok_overlap = True
+                cand_area = max(1, int((cand > 0).sum()))
+                for pm in visible_masks:
+                    inter = int(((pm > 0) & (cand > 0)).sum())
+                    prev_area = max(1, int((pm > 0).sum()))
+                    if (inter / cand_area) > args.max_overlap_ratio or (inter / prev_area) > args.max_overlap_ratio:
+                        ok_overlap = False
+                        break
+
+                # Keep cluster reasonably tight: center not too far from any existing center.
+                if ok_overlap and centers:
+                    cx_new = px + ow // 2
+                    cy_new = py + oh // 2
+                    nearest = min([((cx_new - cx) ** 2 + (cy_new - cy) ** 2) ** 0.5 for cx, cy in centers])
+                    if nearest > args.cluster_distance_factor * max(ow, oh):
+                        ok_overlap = False
+
+                if ok_overlap:
+                    new_full = cand
+                    placed = True
+                    break
+
+            if not placed or new_full is None:
+                continue
 
             obj_beta = random.uniform(args.object_brightness_min, args.object_brightness_max)
             c_rr = cv2.convertScaleAbs(c_rr, alpha=1.0, beta=obj_beta)
-
-            new_full = np.zeros((h, w), dtype=np.uint8)
-            new_full[py:py + oh, px:px + ow][m_rr > 0] = 255
 
             # Occlusion handling: new object is on top, subtract from previous visible masks
             updated_prev = []
@@ -225,6 +267,9 @@ def main():
             roi[aa] = c_rr[aa]
             bg[py:py + oh, px:px + ow] = roi
             visible_masks.append(new_full)
+            ys2, xs2 = np.where(new_full > 0)
+            if len(xs2) > 0:
+                centers.append((int(xs2.mean()), int(ys2.mean())))
 
         bg_beta = random.uniform(args.brightness_min, args.brightness_max)
         bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
