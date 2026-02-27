@@ -43,20 +43,39 @@ def foreground_mask_rembg(frame_bgr):
 
 
 def foreground_mask_yolo(frame_bgr, model, class_id, conf=0.20, imgsz=640, device='0'):
+    """Return a full-resolution binary mask aligned to frame_bgr size.
+
+    Important: do NOT use r.masks.data directly for labeling coordinates,
+    because its resolution can differ from the original frame.
+    """
     r = model.predict(frame_bgr, conf=conf, imgsz=imgsz, device=device, verbose=False)[0]
     if r.masks is None or r.boxes is None or len(r.boxes) == 0:
         return None
 
     cls = r.boxes.cls.cpu().numpy().astype(int)
     scores = r.boxes.conf.cpu().numpy()
-    masks = r.masks.data.cpu().numpy()  # N x H x W
 
     idxs = np.where(cls == int(class_id))[0]
     if len(idxs) == 0:
         idxs = np.arange(len(cls))
+    if len(idxs) == 0:
+        return None
 
     best = idxs[int(np.argmax(scores[idxs]))]
-    m = (masks[best] > 0.5).astype(np.uint8) * 255
+
+    h, w = frame_bgr.shape[:2]
+    m = np.zeros((h, w), dtype=np.uint8)
+
+    # Use polygon coordinates in original image space when available.
+    if getattr(r.masks, 'xy', None) is not None and best < len(r.masks.xy):
+        poly = r.masks.xy[best]
+        if poly is not None and len(poly) >= 3:
+            pts = np.round(poly).astype(np.int32).reshape(-1, 1, 2)
+            cv2.fillPoly(m, [pts], 255)
+
+    if m.max() == 0:
+        return None
+
     kernel = np.ones((3, 3), np.uint8)
     m = cv2.morphologyEx(m, cv2.MORPH_OPEN, kernel)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kernel)
