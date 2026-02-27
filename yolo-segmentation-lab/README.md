@@ -31,11 +31,12 @@ py -3.11 -m venv .venv
 - When generating labels/data from the GUI, the class is auto-registered into `dataset.yaml` (no manual class-list edit required)
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time
 - Synthetic BG (cut-paste augmentation from your background folder, with min/max preview for scale/brightness)
+- Multi-Instance Synth (generate multiple same-class objects per image with touching/overlap cases)
 - Obstruction Data (build on random backgrounds + configurable white-table ratio, overlay hands/arms as occluders, force top-to-center orientation, subtract overlap from object mask, with live 1-sample preview)
 - Manual Real Data (extract evenly sampled frames + edit masks interactively)
 - Training (with configurable dataloader workers; on Windows use workers=0 for stability)
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
-- Inference (including explicit webcam capture resolution controls, e.g. 1920x1080)
+- Inference (including explicit webcam capture resolution controls, per-instance mask colors, and instance count logging)
 
 ## Synthetic run folders
 - Synthetic generation now keeps the selected background image proportions (no forced crop to source image aspect ratio).

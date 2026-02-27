@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 from datetime import datetime
+import numpy as np
 from ultralytics import YOLO
 import cv2
 
@@ -20,6 +21,8 @@ def main():
     ap.add_argument('--save-fps', type=float, default=20.0, help='Fallback FPS for saved output')
     ap.add_argument('--cam-width', type=int, default=1920, help='Requested webcam capture width')
     ap.add_argument('--cam-height', type=int, default=1080, help='Requested webcam capture height')
+    ap.add_argument('--count-log', action='store_true', help='Print per-frame instance count to terminal')
+    ap.add_argument('--count-log-every', type=int, default=10, help='Log every N frames when --count-log is enabled')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
@@ -30,6 +33,43 @@ def main():
 
     writer = None
     save_path = None
+    frame_idx = 0
+
+    palette = [
+        (255, 90, 90),
+        (90, 255, 90),
+        (90, 170, 255),
+        (255, 220, 90),
+        (255, 90, 220),
+        (90, 255, 255),
+    ]
+
+    def render_result(r):
+        if getattr(r, 'orig_img', None) is None:
+            frame = r.plot()
+            return frame, 0
+
+        frame = r.orig_img.copy()
+        count = 0
+        if r.masks is not None:
+            masks = r.masks.data.cpu().numpy()
+            count = int(masks.shape[0])
+            for i, m in enumerate(masks):
+                color = np.array(palette[i % len(palette)], dtype=np.uint8)
+                mm = (m > 0.5)
+                if mm.shape[:2] != frame.shape[:2]:
+                    mm = cv2.resize(mm.astype(np.uint8), (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST) > 0
+                overlay = frame.copy()
+                overlay[mm] = (0.55 * overlay[mm] + 0.45 * color).astype(np.uint8)
+                frame = overlay
+
+                ys, xs = np.where(mm)
+                if len(xs) > 0:
+                    cx, cy = int(xs.mean()), int(ys.mean())
+                    cv2.putText(frame, str(i + 1), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, tuple(int(x) for x in color), 2, cv2.LINE_AA)
+
+        cv2.putText(frame, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+        return frame, count
 
     def show_and_maybe_save(frame):
         nonlocal writer, save_path
@@ -71,13 +111,21 @@ def main():
             ok, raw = cap.read()
             if not ok:
                 break
+            frame_idx += 1
             r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, verbose=False)[0]
-            if show_and_maybe_save(r.plot()):
+            frame, count = render_result(r)
+            if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
+                print(f'frame {frame_idx}: count={count}')
+            if show_and_maybe_save(frame):
                 break
         cap.release()
     else:
         for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device):
-            if show_and_maybe_save(r.plot()):
+            frame_idx += 1
+            frame, count = render_result(r)
+            if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
+                print(f'frame {frame_idx}: count={count}')
+            if show_and_maybe_save(frame):
                 break
 
     if writer is not None:

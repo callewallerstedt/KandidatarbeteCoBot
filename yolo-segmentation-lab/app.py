@@ -30,6 +30,7 @@ class App(tk.Tk):
         self.tab_instructions = ttk.Frame(notebook)
         self.tab_data = ttk.Frame(notebook)
         self.tab_synth = ttk.Frame(notebook)
+        self.tab_synth_multi = ttk.Frame(notebook)
         self.tab_manual = ttk.Frame(notebook)
         self.tab_obstruction = ttk.Frame(notebook)
         self.tab_train = ttk.Frame(notebook)
@@ -38,17 +39,19 @@ class App(tk.Tk):
         notebook.add(self.tab_instructions, text='0) Instructions')
         notebook.add(self.tab_data, text='1) Data Prep')
         notebook.add(self.tab_synth, text='2) Synthetic BG')
-        notebook.add(self.tab_obstruction, text='3) Obstruction Data')
-        notebook.add(self.tab_manual, text='4) Manual Real Data')
-        notebook.add(self.tab_train, text='5) Train')
-        notebook.add(self.tab_ddp, text='6) DDP Multi-PC')
-        notebook.add(self.tab_infer, text='7) Inference')
+        notebook.add(self.tab_synth_multi, text='3) Multi-Instance Synth')
+        notebook.add(self.tab_obstruction, text='4) Obstruction Data')
+        notebook.add(self.tab_manual, text='5) Manual Real Data')
+        notebook.add(self.tab_train, text='6) Train')
+        notebook.add(self.tab_ddp, text='7) DDP Multi-PC')
+        notebook.add(self.tab_infer, text='8) Inference')
 
         self.class_id_choices = [str(i) for i in range(0, 25)]
 
         self.build_instructions_tab()
         self.build_data_tab()
         self.build_synth_tab()
+        self.build_synth_multi_tab()
         self.build_obstruction_tab()
         self.build_manual_tab()
         self.build_train_tab()
@@ -58,6 +61,7 @@ class App(tk.Tk):
         self.sync_yaml_from_folders()
         self.auto_assign_class_id(self.class_var, self.class_id_var)
         self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var)
+        self.auto_assign_class_id(self.synth_multi_class_var, self.synth_multi_class_id_var)
         self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var)
         self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var)
 
@@ -251,12 +255,12 @@ class App(tk.Tk):
                 split_vals.append(f'{i}:{n}')
         self.split_class_choices = split_vals
 
-        for cb_name in ['data_class_cb', 'synth_class_cb', 'obs_class_cb', 'manual_class_cb']:
+        for cb_name in ['data_class_cb', 'synth_class_cb', 'synth_multi_class_cb', 'obs_class_cb', 'manual_class_cb']:
             cb = getattr(self, cb_name, None)
             if cb is not None:
                 cb['values'] = self.class_choices
 
-        for cb_name in ['data_class_id_cb', 'synth_class_id_cb', 'obs_class_id_cb', 'manual_class_id_cb']:
+        for cb_name in ['data_class_id_cb', 'synth_class_id_cb', 'synth_multi_class_id_cb', 'obs_class_id_cb', 'manual_class_id_cb']:
             cb = getattr(self, cb_name, None)
             if cb is not None:
                 cb['values'] = self.class_id_choices
@@ -392,6 +396,73 @@ class App(tk.Tk):
 
         ttk.Button(frm, text='Preview synth settings (min/max)', command=self.preview_synth).grid(row=12, column=0, pady=8)
         ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=12, column=1, pady=8, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
+    def build_synth_multi_tab(self):
+        frm = self.tab_synth_multi
+        self.synth_multi_class_var = tk.StringVar(value='object_name')
+        self.synth_multi_class_id_var = tk.StringVar(value='0')
+        self.synth_multi_bg_dir_var = tk.StringVar()
+        self.synth_multi_n_var = tk.StringVar(value='300')
+        self.synth_multi_min_obj_var = tk.StringVar(value='2')
+        self.synth_multi_max_obj_var = tk.StringVar(value='5')
+        self.synth_multi_overlap_var = tk.StringVar(value='0.5')
+        self.synth_multi_min_scale_var = tk.StringVar(value='0.45')
+        self.synth_multi_max_scale_var = tk.StringVar(value='1.10')
+        self.synth_multi_rot_var = tk.StringVar(value='30')
+        self.synth_multi_bg_bri_min_var = tk.StringVar(value='-20')
+        self.synth_multi_bg_bri_max_var = tk.StringVar(value='20')
+        self.synth_multi_obj_bri_min_var = tk.StringVar(value='-10')
+        self.synth_multi_obj_bri_max_var = tk.StringVar(value='10')
+        self.synth_multi_run_var = tk.StringVar(value='')
+        self.synth_multi_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_multi_class_var, self.synth_multi_class_id_var))
+
+        ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
+        self.synth_multi_class_cb = ttk.Combobox(frm, textvariable=self.synth_multi_class_var)
+        self.synth_multi_class_cb.grid(row=0, column=1, sticky='we')
+
+        ttk.Label(frm, text='Class id').grid(row=1, column=0, sticky='w')
+        self.synth_multi_class_id_cb = ttk.Combobox(frm, textvariable=self.synth_multi_class_id_var, values=self.class_id_choices, width=8)
+        self.synth_multi_class_id_cb.grid(row=1, column=1, sticky='w')
+
+        ttk.Label(frm, text='Background images folder').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_synth_multi_bg_dir).grid(row=2, column=2)
+
+        ttk.Label(frm, text='Num synthetic images').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_n_var).grid(row=3, column=1, sticky='we')
+
+        ttk.Label(frm, text='Min objects per image').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_min_obj_var).grid(row=4, column=1, sticky='we')
+
+        ttk.Label(frm, text='Max objects per image').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_max_obj_var).grid(row=5, column=1, sticky='we')
+
+        ttk.Label(frm, text='Overlap probability').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_overlap_var).grid(row=6, column=1, sticky='we')
+
+        ttk.Label(frm, text='Min scale').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_min_scale_var).grid(row=7, column=1, sticky='we')
+
+        ttk.Label(frm, text='Max scale').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_max_scale_var).grid(row=8, column=1, sticky='we')
+
+        ttk.Label(frm, text='Max rotation deg').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_rot_var).grid(row=9, column=1, sticky='we')
+
+        ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_min_var, width=10).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_bg_bri_max_var, width=10).grid(row=10, column=1)
+
+        ttk.Label(frm, text='Object brightness min/max').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_min_var, width=10).grid(row=11, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_obj_bri_max_var, width=10).grid(row=11, column=1)
+
+        ttk.Label(frm, text='Run name (optional)').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=12, column=1, sticky='we')
+
+        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=13, column=0, pady=8)
+        ttk.Label(frm, text='Creates multiple same-class instances per image, including touching/overlapping placements.').grid(row=14, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -614,6 +685,8 @@ class App(tk.Tk):
         self.cam_h_var = tk.StringVar(value='1080')
         self.save_video_var = tk.BooleanVar(value=False)
         self.save_path_var = tk.StringVar(value='')
+        self.count_log_var = tk.BooleanVar(value=True)
+        self.count_log_every_var = tk.StringVar(value='10')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -648,7 +721,11 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.save_path_var, width=70).grid(row=9, column=1, sticky='we')
         ttk.Button(frm, text='Save As', command=self.pick_save_video).grid(row=9, column=2)
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=10, column=0, pady=8)
+        ttk.Checkbutton(frm, text='Log instance count in terminal', variable=self.count_log_var).grid(row=10, column=0, sticky='w')
+        ttk.Label(frm, text='Log every N frames').grid(row=10, column=1, sticky='e')
+        ttk.Entry(frm, textvariable=self.count_log_every_var, width=8).grid(row=10, column=2, sticky='w')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=11, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -749,6 +826,11 @@ class App(tk.Tk):
         if p:
             self.bg_dir_var.set(p)
 
+    def pick_synth_multi_bg_dir(self):
+        p = filedialog.askdirectory(title='Select background images folder for multi-instance synth')
+        if p:
+            self.synth_multi_bg_dir_var.set(p)
+
     def pick_manual_video(self):
         p = filedialog.askopenfilename(title='Select video for manual review prep')
         if p:
@@ -821,6 +903,33 @@ class App(tk.Tk):
             self.log_line('Please select a background folder first.')
             return
         self.run_cmd(self._synth_cmd_base())
+
+    def generate_synth_multi(self):
+        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
+            return
+        if not self.synth_multi_bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first (multi-instance).')
+            return
+        cmd = [
+            str(PY), 'scripts/synthesize_multi_instance.py',
+            '--class-name', self.synth_multi_class_var.get(),
+            '--class-id', self.synth_multi_class_id_var.get(),
+            '--background-dir', self.synth_multi_bg_dir_var.get(),
+            '--num-synthetic', self.synth_multi_n_var.get(),
+            '--min-objects', self.synth_multi_min_obj_var.get(),
+            '--max-objects', self.synth_multi_max_obj_var.get(),
+            '--overlap-prob', self.synth_multi_overlap_var.get(),
+            '--min-scale', self.synth_multi_min_scale_var.get(),
+            '--max-scale', self.synth_multi_max_scale_var.get(),
+            '--max-rotation', self.synth_multi_rot_var.get(),
+            '--brightness-min', self.synth_multi_bg_bri_min_var.get(),
+            '--brightness-max', self.synth_multi_bg_bri_max_var.get(),
+            '--object-brightness-min', self.synth_multi_obj_bri_min_var.get(),
+            '--object-brightness-max', self.synth_multi_obj_bri_max_var.get(),
+        ]
+        if self.synth_multi_run_var.get().strip():
+            cmd.extend(['--run-name', self.synth_multi_run_var.get().strip()])
+        self.run_cmd(cmd)
 
     def prepare_manual(self):
         if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
@@ -1000,7 +1109,10 @@ class App(tk.Tk):
             '--view-height', self.view_h_var.get(),
             '--cam-width', self.cam_w_var.get(),
             '--cam-height', self.cam_h_var.get(),
+            '--count-log-every', self.count_log_every_var.get(),
         ]
+        if self.count_log_var.get():
+            cmd.append('--count-log')
         if self.save_video_var.get():
             cmd.append('--save-video')
             if self.save_path_var.get().strip():
