@@ -101,6 +101,8 @@ def main():
                 cv2.putText(frame, str(i + 1), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
 
         cv2.putText(frame, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+        if count == 0 and r.boxes is not None and len(r.boxes) > 0:
+            cv2.putText(frame, 'Warning: boxes detected but no seg masks', (12, 62), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2, cv2.LINE_AA)
         return frame, count
 
     def draw_human_arm_overlay(frame, pose_r):
@@ -219,7 +221,7 @@ def main():
             if not ok:
                 break
             frame_idx += 1
-            r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, verbose=False)[0]
+            r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True, verbose=False)[0]
             frame, count = render_result(r)
             if pose_model is not None:
                 pr = pose_model.predict(raw, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
@@ -230,7 +232,7 @@ def main():
                 break
         cap.release()
     else:
-        for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device):
+        for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True):
             frame_idx += 1
             frame, count = render_result(r)
             if pose_model is not None and getattr(r, 'orig_img', None) is not None:
