@@ -138,6 +138,7 @@ def main():
     ap.add_argument('--obstruction-scale', type=float, default=0.8, help='Relative to object bbox height')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
+    ap.add_argument('--preview-count', type=int, default=12)
     ap.add_argument('--run-name', default='', help='Obstruction run folder name (default timestamp)')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
@@ -179,8 +180,11 @@ def main():
     if not pairs:
         raise RuntimeError('No source base image-label pairs found')
 
+    preview_frames = []
+    target_n = args.preview_count if args.preview_only else args.num_synthetic
+
     made = 0
-    for i in range(args.num_synthetic):
+    for i in range(target_n):
         im_path, lb_path = random.choice(pairs)
         src = cv2.imread(str(im_path))
         if src is None:
@@ -304,14 +308,10 @@ def main():
         # vector from top to center (target direction)
         cv2.arrowedLine(ov, top_g, center_i, (255, 255, 0), 2, tipLength=0.12)  # cyan
 
-        if args.preview_only and args.preview_window:
-            cv2.namedWindow('Obstruction Preview (q/esc close)', cv2.WINDOW_NORMAL)
-            cv2.imshow('Obstruction Preview (q/esc close)', ov)
-            while True:
-                k = cv2.waitKey(20) & 0xFF
-                if k in (ord('q'), 27):
-                    break
-            cv2.destroyAllWindows()
+        if args.preview_only:
+            out_viz = out_viz_dir / f'{stem}_overlay.jpg'
+            cv2.imwrite(str(out_viz), ov)
+            preview_frames.append(ov)
         else:
             out_viz = out_viz_dir / f'{stem}_overlay.jpg'
             cv2.imwrite(str(out_viz), ov)
@@ -327,10 +327,23 @@ def main():
     print(f'Obstruction synthetic created: {made}')
     if args.preview_only:
         print('Preview-only mode: no train images/labels were written.')
-        if args.preview_window:
-            print('Preview shown in window (no preview image saved).')
-        else:
-            print(f'Overlays dir: {out_viz_dir}')
+        print(f'Overlays dir: {out_viz_dir}')
+        if args.preview_window and preview_frames:
+            idx = 0
+            win = 'Obstruction Preview (left/right, q to quit)'
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+            while True:
+                show = preview_frames[idx].copy()
+                cv2.putText(show, f'{idx+1}/{len(preview_frames)}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+                cv2.imshow(win, show)
+                k = cv2.waitKey(0)
+                if k in (ord('q'), 27):
+                    break
+                if k in (81, 2424832, ord('a')):
+                    idx = max(0, idx - 1)
+                elif k in (83, 2555904, ord('d')):
+                    idx = min(len(preview_frames)-1, idx + 1)
+            cv2.destroyAllWindows()
     else:
         print(f'Images dir: {out_img_dir}')
         print(f'Labels dir: {out_lbl_dir}')

@@ -352,6 +352,7 @@ class App(tk.Tk):
         self.synth_bri_max_var = tk.StringVar(value='20')
         self.synth_obj_bri_min_var = tk.StringVar(value='-10')
         self.synth_obj_bri_max_var = tk.StringVar(value='10')
+        self.synth_preview_count_var = tk.StringVar(value='12')
         self.synth_run_var = tk.StringVar(value='')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
@@ -394,8 +395,11 @@ class App(tk.Tk):
         ttk.Label(frm, text='Synth run name (optional)').grid(row=11, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=11, column=1, sticky='we')
 
-        ttk.Button(frm, text='Preview synth settings (min/max)', command=self.preview_synth).grid(row=12, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=12, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=12, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=13, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=13, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_multi_tab(self):
@@ -414,6 +418,7 @@ class App(tk.Tk):
         self.synth_multi_bg_bri_max_var = tk.StringVar(value='20')
         self.synth_multi_obj_bri_min_var = tk.StringVar(value='-10')
         self.synth_multi_obj_bri_max_var = tk.StringVar(value='10')
+        self.synth_multi_preview_count_var = tk.StringVar(value='12')
         self.synth_multi_run_var = tk.StringVar(value='')
         self.synth_multi_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_multi_class_var, self.synth_multi_class_id_var))
 
@@ -461,8 +466,12 @@ class App(tk.Tk):
         ttk.Label(frm, text='Run name (optional)').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=12, column=1, sticky='we')
 
-        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=13, column=0, pady=8)
-        ttk.Label(frm, text='Creates multiple same-class instances per image, including touching/overlapping placements.').grid(row=14, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=13, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview multi-instance samples (left/right browse)', command=self.preview_synth_multi).grid(row=14, column=0, pady=8)
+        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=14, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Creates multiple same-class instances per image, including touching/overlapping placements.').grid(row=15, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -478,6 +487,7 @@ class App(tk.Tk):
         self.obs_overlap_var = tk.StringVar(value='0.8')
         self.obs_scale_var = tk.StringVar(value='0.8')
         self.obs_white_prob_var = tk.StringVar(value='0.10')
+        self.obs_preview_count_var = tk.StringVar(value='12')
         self.obs_run_var = tk.StringVar(value='')
         self.obs_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var))
 
@@ -521,9 +531,12 @@ class App(tk.Tk):
         ttk.Label(frm, text='Obstruction run name (optional)').grid(row=11, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_run_var).grid(row=11, column=1, sticky='we')
 
-        ttk.Button(frm, text='Preview 1 obstruction sample', command=self.preview_obstruction).grid(row=12, column=0, pady=8)
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=12, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=13, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_preview_count_var, width=10).grid(row=12, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=13, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=14, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_manual_tab(self):
@@ -893,7 +906,7 @@ class App(tk.Tk):
         if not self.bg_dir_var.get().strip():
             self.log_line('Please select a background folder first.')
             return
-        cmd = self._synth_cmd_base() + ['--preview-only', '--preview-window']
+        cmd = self._synth_cmd_base() + ['--preview-only', '--preview-window', '--preview-count', self.synth_preview_count_var.get()]
         self.run_cmd(cmd)
 
     def generate_synth(self):
@@ -904,12 +917,7 @@ class App(tk.Tk):
             return
         self.run_cmd(self._synth_cmd_base())
 
-    def generate_synth_multi(self):
-        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
-            return
-        if not self.synth_multi_bg_dir_var.get().strip():
-            self.log_line('Please select a background folder first (multi-instance).')
-            return
+    def _synth_multi_cmd_base(self):
         cmd = [
             str(PY), 'scripts/synthesize_multi_instance.py',
             '--class-name', self.synth_multi_class_var.get(),
@@ -929,7 +937,24 @@ class App(tk.Tk):
         ]
         if self.synth_multi_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_multi_run_var.get().strip()])
+        return cmd
+
+    def preview_synth_multi(self):
+        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
+            return
+        if not self.synth_multi_bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first (multi-instance).')
+            return
+        cmd = self._synth_multi_cmd_base() + ['--preview-only', '--preview-window', '--preview-count', self.synth_multi_preview_count_var.get()]
         self.run_cmd(cmd)
+
+    def generate_synth_multi(self):
+        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
+            return
+        if not self.synth_multi_bg_dir_var.get().strip():
+            self.log_line('Please select a background folder first (multi-instance).')
+            return
+        self.run_cmd(self._synth_multi_cmd_base())
 
     def prepare_manual(self):
         if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
@@ -977,7 +1002,7 @@ class App(tk.Tk):
         if not self.obs_bg_dir_var.get().strip():
             self.log_line('Please select background folder first.')
             return
-        cmd = self._obstruction_cmd_base() + ['--num-synthetic', '1', '--preview-only', '--preview-window']
+        cmd = self._obstruction_cmd_base() + ['--preview-only', '--preview-window', '--preview-count', self.obs_preview_count_var.get()]
         self.run_cmd(cmd)
 
     def generate_obstruction(self):

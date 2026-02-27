@@ -101,6 +101,9 @@ def main():
     ap.add_argument('--object-brightness-min', type=float, default=-10.0)
     ap.add_argument('--object-brightness-max', type=float, default=10.0)
     ap.add_argument('--run-name', default='')
+    ap.add_argument('--preview-only', action='store_true')
+    ap.add_argument('--preview-window', action='store_true')
+    ap.add_argument('--preview-count', type=int, default=12)
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -153,8 +156,11 @@ def main():
     if not cutouts:
         raise RuntimeError('No valid source cutouts found for multi-instance synth')
 
+    preview_frames = []
+    target_n = args.preview_count if args.preview_only else args.num_synthetic
+
     made = 0
-    for i in range(args.num_synthetic):
+    for i in range(target_n):
         bg = pick_random_background(bg_files)
         h, w = bg.shape[:2]
 
@@ -234,9 +240,6 @@ def main():
         out_lbl = out_lbl_dir / f'{stem}.txt'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
-        cv2.imwrite(str(out_img), bg)
-        write_yolo_multi(out_lbl, args.class_id, polys_new, w, h)
-
         viz = bg.copy()
         colors = [(255, 80, 80), (80, 255, 80), (80, 160, 255), (255, 220, 80), (255, 80, 220)]
         for j, p in enumerate(polys_new):
@@ -244,13 +247,40 @@ def main():
             cv2.drawContours(viz, [p.astype(np.int32).reshape(-1, 1, 2)], -1, col, 2)
         cv2.putText(viz, f'instances={len(polys_new)}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.imwrite(str(out_viz), viz)
+
+        if args.preview_only:
+            preview_frames.append(viz)
+        else:
+            cv2.imwrite(str(out_img), bg)
+            write_yolo_multi(out_lbl, args.class_id, polys_new, w, h)
+
         made += 1
 
     print(f'Multi-instance synthetic created: {made}')
     print(f'Run name: {run_name}')
-    print(f'Images dir: {out_img_dir}')
-    print(f'Labels dir: {out_lbl_dir}')
+    if args.preview_only:
+        print('Preview-only mode: no train images/labels written.')
+    else:
+        print(f'Images dir: {out_img_dir}')
+        print(f'Labels dir: {out_lbl_dir}')
     print(f'Overlays dir: {out_viz_dir}')
+
+    if args.preview_only and args.preview_window and preview_frames:
+        idx = 0
+        win = 'Multi-instance Preview (left/right, q to quit)'
+        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+        while True:
+            show = preview_frames[idx].copy()
+            cv2.putText(show, f'{idx+1}/{len(preview_frames)}', (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+            cv2.imshow(win, show)
+            k = cv2.waitKey(0)
+            if k in (ord('q'), 27):
+                break
+            if k in (81, 2424832, ord('a')):
+                idx = max(0, idx - 1)
+            elif k in (83, 2555904, ord('d')):
+                idx = min(len(preview_frames)-1, idx + 1)
+        cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':

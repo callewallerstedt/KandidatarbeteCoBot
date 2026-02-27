@@ -168,6 +168,7 @@ def main():
     ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
+    ap.add_argument('--preview-count', type=int, default=12, help='How many random previews to generate in preview-only mode')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -208,49 +209,41 @@ def main():
         raise RuntimeError(f'No source image-label pairs found for class={args.class_name}')
 
     if args.preview_only:
-        combos = [
-            (args.min_scale, args.brightness_min, args.object_brightness_min, 'min-scale | bg min | obj min'),
-            (args.max_scale, args.brightness_min, args.object_brightness_max, 'max-scale | bg min | obj max'),
-            (args.min_scale, args.brightness_max, args.object_brightness_min, 'min-scale | bg max | obj min'),
-            (args.max_scale, args.brightness_max, args.object_brightness_max, 'max-scale | bg max | obj max'),
-        ]
         previews = []
-        for sc, bg_br, obj_br, label in combos:
+        for i in range(max(1, args.preview_count)):
             sample = None
             for _ in range(20):
-                sample = compose_once(pairs, bg_files, args, fixed_scale=sc, fixed_bg_beta=bg_br, fixed_obj_beta=obj_br)
+                sample = compose_once(pairs, bg_files, args)
                 if sample is not None:
                     break
             if sample is None:
                 continue
             vis = sample['image'].copy()
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-            cv2.putText(vis, f'{label} | scale={sc:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(vis, f'bg_beta={bg_br:.1f} obj_beta={obj_br:.1f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'preview {i+1}/{max(1,args.preview_count)} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'bg_beta={sample["bg_beta"]:.1f} obj_beta={sample["obj_beta"]:.1f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
             previews.append(vis)
+            cv2.imwrite(str(out_viz_dir / f'preview_{i+1:03d}.jpg'), vis)
 
         if not previews:
             raise RuntimeError('Could not create preview samples with current settings.')
 
-        # 2x2 grid
-        while len(previews) < 4:
-            previews.append(previews[-1])
-        h, w = previews[0].shape[:2]
-        previews = [cv2.resize(p, (w, h)) for p in previews]
-        top = np.hstack([previews[0], previews[1]])
-        bot = np.hstack([previews[2], previews[3]])
-        grid = np.vstack([top, bot])
-
-        out_prev = out_viz_dir / 'synth_settings_preview.jpg'
-        cv2.imwrite(str(out_prev), grid)
-        print(f'Preview saved: {out_prev}')
+        print(f'Preview images saved in: {out_viz_dir}')
         if args.preview_window:
-            cv2.namedWindow('Synth Preview (q/esc close)', cv2.WINDOW_NORMAL)
-            cv2.imshow('Synth Preview (q/esc close)', grid)
+            idx = 0
+            win = 'Synth Preview (left/right, q to quit)'
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
             while True:
-                k = cv2.waitKey(20) & 0xFF
+                show = previews[idx].copy()
+                cv2.putText(show, f'{idx+1}/{len(previews)}', (12, 86), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.imshow(win, show)
+                k = cv2.waitKey(0)
                 if k in (ord('q'), 27):
                     break
+                if k in (81, 2424832, ord('a')):
+                    idx = max(0, idx - 1)
+                elif k in (83, 2555904, ord('d')):
+                    idx = min(len(previews) - 1, idx + 1)
             cv2.destroyAllWindows()
         print('Preview-only mode: no training images/labels written.')
         return
