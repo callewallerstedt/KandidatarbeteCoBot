@@ -30,8 +30,8 @@ def write_yolo(label_path: Path, class_id: int, poly: np.ndarray, w: int, h: int
     label_path.write_text(' '.join(vals) + '\n', encoding='utf-8')
 
 
-def mask_to_polygon(mask, eps=0.0015):
-    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+def mask_to_polygon(mask, eps=0.0008):
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not cnts:
         return None
     c = max(cnts, key=cv2.contourArea)

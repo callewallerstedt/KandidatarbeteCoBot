@@ -53,17 +53,30 @@ def main():
     def smooth_polygon(poly, smooth_strength):
         if smooth_strength <= 0 or poly is None or len(poly) < 5:
             return poly
-        pts = poly.astype('float32').reshape(-1, 1, 2)
-        # upscale then smooth contour for less blocky edges
-        factor = max(1, int(smooth_strength))
-        up = cv2.resize(pts, (1, len(pts) * factor), interpolation=cv2.INTER_CUBIC)
-        up = up.reshape(-1, 2)
-        # moving average smoothing
-        k = min(11, max(3, 2 * factor + 1))
-        pad = k // 2
-        ext = np.vstack([up[-pad:], up, up[:pad]])
-        sm = np.array([ext[i:i + k].mean(axis=0) for i in range(len(up))], dtype=np.float32)
-        return sm
+        p = np.round(poly).astype(np.int32)
+        x1, y1 = p[:, 0].min(), p[:, 1].min()
+        x2, y2 = p[:, 0].max(), p[:, 1].max()
+        pad = max(3, int(smooth_strength) * 2)
+        w = max(8, int(x2 - x1 + 1 + 2 * pad))
+        h = max(8, int(y2 - y1 + 1 + 2 * pad))
+
+        local = np.zeros((h, w), dtype=np.uint8)
+        q = p.copy()
+        q[:, 0] = q[:, 0] - x1 + pad
+        q[:, 1] = q[:, 1] - y1 + pad
+        cv2.fillPoly(local, [q.reshape(-1, 1, 2)], 255)
+
+        k = max(3, 2 * int(smooth_strength) + 1)
+        local = cv2.GaussianBlur(local, (k, k), 0)
+        _, local = cv2.threshold(local, 127, 255, cv2.THRESH_BINARY)
+
+        cnts, _ = cv2.findContours(local, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not cnts:
+            return poly
+        c = max(cnts, key=cv2.contourArea).reshape(-1, 2).astype(np.float32)
+        c[:, 0] = c[:, 0] + x1 - pad
+        c[:, 1] = c[:, 1] + y1 - pad
+        return c
 
     def render_result(r):
         if getattr(r, 'orig_img', None) is None:

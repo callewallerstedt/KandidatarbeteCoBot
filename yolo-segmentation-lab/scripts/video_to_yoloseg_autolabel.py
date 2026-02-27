@@ -7,8 +7,8 @@ import numpy as np
 from rembg import remove
 
 
-def mask_to_polygon(mask, eps=0.0015):
-    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+def mask_to_polygon(mask, eps=0.0008):
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not cnts:
         return None
     c = max(cnts, key=cv2.contourArea)
@@ -75,7 +75,7 @@ def main():
     ap.add_argument('--min-area-ratio', type=float, default=0.01)
     ap.add_argument('--max-area-ratio', type=float, default=0.80)
     ap.add_argument('--mask-quality', choices=['fast', 'high'], default='high')
-    ap.add_argument('--poly-eps', type=float, default=0.0015, help='Polygon simplification ratio; smaller = more detail')
+    ap.add_argument('--poly-eps', type=float, default=0.0008, help='Polygon simplification ratio; smaller = more detail')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
