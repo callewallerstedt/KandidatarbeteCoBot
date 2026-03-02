@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
+using System.Threading;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [RequireComponent(typeof(Camera))]
 public class CameraTcpStreamer : MonoBehaviour
@@ -9,33 +13,53 @@ public class CameraTcpStreamer : MonoBehaviour
     public string host = "127.0.0.1";
     public int port = 5000;
 
-    [Header("Capture (lower defaults to reduce Unity lag)")]
-    public int width = 320;
-    public int height = 180;
-    [Range(1, 30)] public int fps = 8;
-    [Range(10, 100)] public int jpegQuality = 55;
+    [Header("Capture")]
+    public int width = 1280;
+    public int height = 720;
+    [Range(1, 60)] public int fps = 24;
+    [Range(10, 100)] public int jpegQuality = 80;
+
+    [Header("Performance")]
+    [Tooltip("Max pending frames in queue. 1 = always latest frame (lowest latency).")]
+    [Range(1, 6)] public int maxQueueSize = 2;
 
     private Camera cam;
     private RenderTexture rt;
-    private Texture2D tex;
+    private Texture2D encodeTex;
+
     private TcpClient client;
     private NetworkStream stream;
-    private float nextTime;
+
+    private float nextCaptureTime;
+    private bool readbackInFlight;
+
+    private readonly ConcurrentQueue<byte[]> frameQueue = new ConcurrentQueue<byte[]>();
+    private readonly AutoResetEvent queueSignal = new AutoResetEvent(false);
+    private Thread senderThread;
+    private volatile bool senderRunning;
 
     void Start()
     {
         cam = GetComponent<Camera>();
 
-        // Keep this camera from rendering to screen if it's only a stream camera.
-        // (You can still override in inspector.)
-        if (cam.targetDisplay == 0)
-            cam.targetDisplay = 1;
+        rt = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+        rt.Create();
 
-        rt = new RenderTexture(width, height, 24);
-        tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+        encodeTex = new Texture2D(width, height, TextureFormat.RGBA32, false);
         cam.targetTexture = rt;
 
-        TryConnect();
+        StartSenderThread();
+    }
+
+    void StartSenderThread()
+    {
+        senderRunning = true;
+        senderThread = new Thread(SenderLoop)
+        {
+            IsBackground = true,
+            Name = $"CameraTcpStreamerSender-{name}-{port}"
+        };
+        senderThread.Start();
     }
 
     void TryConnect()
@@ -44,6 +68,7 @@ public class CameraTcpStreamer : MonoBehaviour
         {
             client = new TcpClient();
             client.NoDelay = true;
+            client.SendTimeout = 2000;
             client.Connect(host, port);
             stream = client.GetStream();
             Debug.Log($"[{name}] Connected to {host}:{port}");
@@ -51,49 +76,105 @@ public class CameraTcpStreamer : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogWarning($"[{name}] Connect failed: {e.Message}");
+            SafeClose();
         }
     }
 
     void Update()
     {
-        if (Time.time < nextTime) return;
-        nextTime = Time.time + (1f / fps);
+        if (Time.time < nextCaptureTime) return;
+        nextCaptureTime = Time.time + (1f / fps);
 
-        if (client == null || !client.Connected || stream == null)
-        {
-            TryConnect();
-            return;
-        }
+        if (readbackInFlight) return;
+        if (!rt.IsCreated()) return;
+
+        readbackInFlight = true;
+        AsyncGPUReadback.Request(rt, 0, TextureFormat.RGBA32, OnReadbackComplete);
+    }
+
+    void OnReadbackComplete(AsyncGPUReadbackRequest req)
+    {
+        readbackInFlight = false;
+
+        if (!senderRunning) return;
+        if (req.hasError) return;
 
         try
         {
-            // NOTE: Do NOT call cam.Render() here. It causes extra rendering and heavy lag.
-            RenderTexture current = RenderTexture.active;
-            RenderTexture.active = rt;
+            NativeArray<byte> data = req.GetData<byte>();
+            encodeTex.LoadRawTextureData(data);
+            encodeTex.Apply(false, false);
 
-            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            tex.Apply(false, false);
+            byte[] jpg = encodeTex.EncodeToJPG(jpegQuality);
+            if (jpg == null || jpg.Length == 0) return;
 
-            RenderTexture.active = current;
+            while (frameQueue.Count >= maxQueueSize && frameQueue.TryDequeue(out _))
+            {
+                // Drop oldest frame to keep latency down.
+            }
 
-            byte[] jpg = tex.EncodeToJPG(jpegQuality);
-            byte[] len = BitConverter.GetBytes(jpg.Length); // little-endian int32
-
-            stream.Write(len, 0, 4);
-            stream.Write(jpg, 0, jpg.Length);
+            frameQueue.Enqueue(jpg);
+            queueSignal.Set();
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"[{name}] Send failed: {e.Message}");
-            SafeClose();
+            Debug.LogWarning($"[{name}] Encode queue failed: {e.Message}");
+        }
+    }
+
+    void SenderLoop()
+    {
+        while (senderRunning)
+        {
+            try
+            {
+                if (client == null || !client.Connected || stream == null)
+                {
+                    TryConnect();
+                    Thread.Sleep(200);
+                    continue;
+                }
+
+                if (!frameQueue.TryDequeue(out byte[] jpg))
+                {
+                    queueSignal.WaitOne(50);
+                    continue;
+                }
+
+                byte[] len = BitConverter.GetBytes(jpg.Length); // little-endian int32
+                stream.Write(len, 0, 4);
+                stream.Write(jpg, 0, jpg.Length);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[{name}] Send failed: {e.Message}");
+                SafeClose();
+                Thread.Sleep(300);
+            }
         }
     }
 
     void OnDestroy()
     {
+        senderRunning = false;
+        queueSignal.Set();
+
+        try
+        {
+            if (senderThread != null && senderThread.IsAlive)
+                senderThread.Join(800);
+        }
+        catch { }
+
         SafeClose();
+
         if (cam != null) cam.targetTexture = null;
-        if (rt != null) rt.Release();
+        if (rt != null)
+        {
+            rt.Release();
+            Destroy(rt);
+        }
+        if (encodeTex != null) Destroy(encodeTex);
     }
 
     void SafeClose()

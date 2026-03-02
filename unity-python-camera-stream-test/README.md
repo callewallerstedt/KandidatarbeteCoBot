@@ -18,7 +18,12 @@ This folder contains a simple test setup where two Unity cameras stream JPEG fra
 3. Configure:
    - Camera 1: `host=127.0.0.1`, `port=5000`
    - Camera 2: `host=127.0.0.1`, `port=5001`
-4. Keep both running in Play mode.
+4. For high quality 24 FPS start with:
+   - `width=1280`, `height=720`
+   - `fps=24`
+   - `jpegQuality=80`
+   - `maxQueueSize=2`
+5. Keep both running in Play mode.
 
 ## Python setup (Windows)
 
@@ -67,11 +72,12 @@ The app tracks the red dot and shows estimated 3D coordinates in the Tkinter win
 
 ## Performance tips (important)
 
-If Unity lags/freezes while streaming from two cameras:
+`CameraTcpStreamer.cs` now uses:
+- Async GPU readback (non-blocking capture)
+- background sender thread
+- queue with old-frame dropping for low latency
 
-- In `CameraTcpStreamer`, keep low defaults:
-  - `width=320`, `height=180`
-  - `fps=8`
-  - `jpegQuality=55`
-- Keep stream cameras off main game display when possible.
-- If still heavy, reduce to `fps=5` first, then lower resolution.
+If Unity still lags at 24 FPS x2:
+- Lower resolution first (e.g. 960x540)
+- Then lower jpeg quality (e.g. 70)
+- Keep `maxQueueSize` small (1-2) to avoid backlog
