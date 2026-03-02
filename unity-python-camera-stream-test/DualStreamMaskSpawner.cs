@@ -75,7 +75,8 @@ public class DualStreamMaskSpawner : MonoBehaviour
         streamer.height = height;
         streamer.fps = fps;
         streamer.maxQueueSize = maxQueueSize;
-        streamer.encodeMode = CameraTcpStreamer.EncodeMode.PNG; // lossless mask edges/colors
+        // NOTE: keep compatibility with older CameraTcpStreamer.cs versions.
+        // If your CameraTcpStreamer supports EncodeMode, set it to PNG in Inspector for lossless masks.
 
         Debug.Log($"[{name}] Mask camera ready on port {maskPort}. Objects on layer '{maskLayerName}' will render red on black.");
     }
