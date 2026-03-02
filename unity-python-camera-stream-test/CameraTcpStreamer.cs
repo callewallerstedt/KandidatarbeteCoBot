@@ -9,11 +9,11 @@ public class CameraTcpStreamer : MonoBehaviour
     public string host = "127.0.0.1";
     public int port = 5000;
 
-    [Header("Capture")]
-    public int width = 640;
-    public int height = 360;
-    [Range(1, 60)] public int fps = 15;
-    [Range(10, 100)] public int jpegQuality = 70;
+    [Header("Capture (lower defaults to reduce Unity lag)")]
+    public int width = 320;
+    public int height = 180;
+    [Range(1, 30)] public int fps = 8;
+    [Range(10, 100)] public int jpegQuality = 55;
 
     private Camera cam;
     private RenderTexture rt;
@@ -25,6 +25,12 @@ public class CameraTcpStreamer : MonoBehaviour
     void Start()
     {
         cam = GetComponent<Camera>();
+
+        // Keep this camera from rendering to screen if it's only a stream camera.
+        // (You can still override in inspector.)
+        if (cam.targetDisplay == 0)
+            cam.targetDisplay = 1;
+
         rt = new RenderTexture(width, height, 24);
         tex = new Texture2D(width, height, TextureFormat.RGB24, false);
         cam.targetTexture = rt;
@@ -37,6 +43,7 @@ public class CameraTcpStreamer : MonoBehaviour
         try
         {
             client = new TcpClient();
+            client.NoDelay = true;
             client.Connect(host, port);
             stream = client.GetStream();
             Debug.Log($"[{name}] Connected to {host}:{port}");
@@ -60,12 +67,12 @@ public class CameraTcpStreamer : MonoBehaviour
 
         try
         {
+            // NOTE: Do NOT call cam.Render() here. It causes extra rendering and heavy lag.
             RenderTexture current = RenderTexture.active;
             RenderTexture.active = rt;
 
-            cam.Render();
             tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            tex.Apply();
+            tex.Apply(false, false);
 
             RenderTexture.active = current;
 
@@ -74,7 +81,6 @@ public class CameraTcpStreamer : MonoBehaviour
 
             stream.Write(len, 0, 4);
             stream.Write(jpg, 0, jpg.Length);
-            stream.Flush();
         }
         catch (Exception e)
         {

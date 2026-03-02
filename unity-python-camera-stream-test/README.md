@@ -64,3 +64,14 @@ The app tracks the red dot and shows estimated 3D coordinates in the Tkinter win
 - Run Python app first, then start Unity Play mode.
 - If Unity is on another machine, set `host` in Unity to the Python machine IP and open firewall ports 5000/5001.
 - Use **Load Saved Calibration** to reuse previous calibration without clicking again.
+
+## Performance tips (important)
+
+If Unity lags/freezes while streaming from two cameras:
+
+- In `CameraTcpStreamer`, keep low defaults:
+  - `width=320`, `height=180`
+  - `fps=8`
+  - `jpegQuality=55`
+- Keep stream cameras off main game display when possible.
+- If still heavy, reduce to `fps=5` first, then lower resolution.
