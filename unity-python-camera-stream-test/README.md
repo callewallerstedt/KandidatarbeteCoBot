@@ -5,7 +5,6 @@ This folder contains a simple test setup where two Unity cameras stream JPEG fra
 ## Files
 
 - `CameraTcpStreamer.cs` - Unity script to stream one camera over TCP (JPG/PNG modes).
-- `DualStreamMaskSpawner.cs` - attach to RGB camera to auto-create a second mask stream camera.
 - `ObjectMaskRed.shader` - replacement shader for pure red object masks.
 - `receive_two_cams.py` - basic Python receiver that opens two windows (`Unity Cam 1`, `Unity Cam 2`).
 - `receive_rgb_and_mask.py` - Python receiver for 4 streams (2 RGB + 2 masks).
@@ -15,33 +14,33 @@ This folder contains a simple test setup where two Unity cameras stream JPEG fra
 - `start_calibration_tracker.bat` - Windows one-click start for calibration + 3D tracker.
 - `start_rgb_and_mask_receiver.bat` - Windows one-click start for 2 RGB + 2 mask windows.
 
-## Unity setup
+## Unity setup (one script for RGB + SEG)
 
-1. In your Unity project, add `CameraTcpStreamer.cs`.
-2. Attach it to two different RGB Camera objects.
-3. Configure RGB streams:
-   - Camera 1: `host=127.0.0.1`, `port=5000`
-   - Camera 2: `host=127.0.0.1`, `port=5001`
-4. For high quality 24 FPS start with:
+1. In your Unity project, add:
+   - `CameraTcpStreamer.cs`
+   - `ObjectMaskRed.shader`
+2. Create layer `SegmentationMask` and put target objects on that layer.
+3. Attach `CameraTcpStreamer.cs` to your two main cameras.
+4. Configure camera 1:
+   - `host=127.0.0.1`
+   - `port=5000` (RGB)
+   - `enableMaskStream=true`
+   - `maskPort=6000` (SEG)
+5. Configure camera 2:
+   - `host=127.0.0.1`
+   - `port=5001` (RGB)
+   - `enableMaskStream=true`
+   - `maskPort=6001` (SEG)
+6. Recommended start values:
    - `width=1280`, `height=720`
    - `fps=24`
-   - `encodeMode=JPG`
+   - `encodeMode=JPG` (RGB stream)
    - `jpegQuality=80`
    - `maxQueueSize=2`
-5. Keep both running in Play mode.
 
-## Perfect mask stream setup (red on black)
-
-1. Import `ObjectMaskRed.shader` into Unity.
-2. Create a layer named: `SegmentationMask`.
-3. Put the objects you want to segment on that layer.
-4. Attach `DualStreamMaskSpawner.cs` to each RGB camera.
-5. Set ports:
-   - RGB cam 1 mask port: `6000`
-   - RGB cam 2 mask port: `6001`
-6. The spawner auto-creates a mask camera per RGB camera and streams **PNG** (lossless) where:
-   - object pixels = `(255,0,0)` red
-   - everything else = black
+Mask stream is auto-created by the same script and uses lossless PNG with:
+- object pixels = pure red `(255,0,0)`
+- background = black
 
 ## Python setup (Windows)
 
@@ -88,12 +87,12 @@ Use the `N` input + **Take N Pics** button to capture dataset frames.
 
 Output folders (auto-created):
 - `images/RGB`  (raw RGB frames, cam1 + cam2)
-- `images/SEG`  (red-on-black segmentation masks, cam1 + cam2)
+- `images/SEG`  (segmentation masks, cam1 + cam2 — uses Unity mask streams when available)
 
 ## Notes
 
 - Run Python app first, then start Unity Play mode.
-- If Unity is on another machine, set `host` in Unity to the Python machine IP and open firewall ports 5000/5001.
+- If Unity is on another machine, set `host` in Unity to the Python machine IP and open firewall ports 5000/5001/6000/6001.
 - Use **Load Saved Calibration** to reuse previous calibration without clicking again.
 
 ## Performance tips (important)

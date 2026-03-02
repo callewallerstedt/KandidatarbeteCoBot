@@ -15,7 +15,7 @@ from tkinter import messagebox
 # Stream config
 # ---------------------------
 HOST = "0.0.0.0"
-PORTS = [5000, 5001]
+PORTS = [5000, 5001, 6000, 6001]  # RGB1, RGB2, SEG1, SEG2
 WINDOWS = ["Unity Cam 1", "Unity Cam 2"]
 
 # ---------------------------
@@ -35,8 +35,8 @@ WORLD_CORNERS_XY = np.array([
 
 CALIB_FILE = Path(__file__).parent / "calibration_data.json"
 
-latest_frames = [None, None]
-locks = [threading.Lock(), threading.Lock()]
+latest_frames = [None, None, None, None]
+locks = [threading.Lock(), threading.Lock(), threading.Lock(), threading.Lock()]
 running = True
 
 
@@ -474,15 +474,20 @@ def capture_dataset(n_pics):
                 f0 = latest_frames[0].copy() if latest_frames[0] is not None else None
             with locks[1]:
                 f1 = latest_frames[1].copy() if latest_frames[1] is not None else None
+            with locks[2]:
+                s0 = latest_frames[2].copy() if latest_frames[2] is not None else None
+            with locks[3]:
+                s1 = latest_frames[3].copy() if latest_frames[3] is not None else None
 
             if f0 is None or f1 is None:
                 with state.lock:
-                    state.instructions = "Take N Pics paused: waiting for both camera frames..."
+                    state.instructions = "Take N Pics paused: waiting for both RGB streams..."
                 time.sleep(0.1)
                 continue
 
-            seg0 = make_red_on_black_mask_image(f0)
-            seg1 = make_red_on_black_mask_image(f1)
+            # Prefer true mask streams from Unity (ports 6000/6001). Fallback to HSV-generated masks.
+            seg0 = s0 if s0 is not None else make_red_on_black_mask_image(f0)
+            seg1 = s1 if s1 is not None else make_red_on_black_mask_image(f1)
 
             cv2.imwrite(str(rgb_dir / f"{stamp}_cam1_{i:04d}.png"), f0)
             cv2.imwrite(str(rgb_dir / f"{stamp}_cam2_{i:04d}.png"), f1)
