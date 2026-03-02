@@ -3,6 +3,7 @@ import struct
 import threading
 import time
 import json
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -69,6 +70,7 @@ class SharedState:
         }
 
         self.last_3d = None
+        self.capture_in_progress = False
         self.lock = threading.Lock()
 
 
@@ -183,7 +185,7 @@ def closest_point_between_lines(line1, line2):
 # ---------------------------
 # Vision: red dot detection
 # ---------------------------
-def detect_red_dot(frame_bgr):
+def get_red_binary_mask(frame_bgr):
     hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
 
     # red wraps around hue range
@@ -195,9 +197,20 @@ def detect_red_dot(frame_bgr):
     mask1 = cv2.inRange(hsv, lower1, upper1)
     mask2 = cv2.inRange(hsv, lower2, upper2)
     mask = cv2.bitwise_or(mask1, mask2)
-
     mask = cv2.GaussianBlur(mask, (5, 5), 0)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    return mask
+
+
+def make_red_on_black_mask_image(frame_bgr):
+    mask = get_red_binary_mask(frame_bgr)
+    out = np.zeros_like(frame_bgr)
+    out[mask > 0] = (0, 0, 255)  # BGR pure red
+    return out
+
+
+def detect_red_dot(frame_bgr):
+    mask = get_red_binary_mask(frame_bgr)
 
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts:
@@ -439,10 +452,74 @@ def reset_calibration():
         state.last_3d = None
 
 
+def capture_dataset(n_pics):
+    with state.lock:
+        if state.capture_in_progress:
+            return
+        state.capture_in_progress = True
+
+    try:
+        base = Path(__file__).parent / "images"
+        rgb_dir = base / "RGB"
+        seg_dir = base / "SEG"
+        rgb_dir.mkdir(parents=True, exist_ok=True)
+        seg_dir.mkdir(parents=True, exist_ok=True)
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for i in range(n_pics):
+            if not running:
+                break
+
+            with locks[0]:
+                f0 = latest_frames[0].copy() if latest_frames[0] is not None else None
+            with locks[1]:
+                f1 = latest_frames[1].copy() if latest_frames[1] is not None else None
+
+            if f0 is None or f1 is None:
+                with state.lock:
+                    state.instructions = "Take N Pics paused: waiting for both camera frames..."
+                time.sleep(0.1)
+                continue
+
+            seg0 = make_red_on_black_mask_image(f0)
+            seg1 = make_red_on_black_mask_image(f1)
+
+            cv2.imwrite(str(rgb_dir / f"{stamp}_cam1_{i:04d}.png"), f0)
+            cv2.imwrite(str(rgb_dir / f"{stamp}_cam2_{i:04d}.png"), f1)
+            cv2.imwrite(str(seg_dir / f"{stamp}_cam1_{i:04d}.png"), seg0)
+            cv2.imwrite(str(seg_dir / f"{stamp}_cam2_{i:04d}.png"), seg1)
+
+            with state.lock:
+                state.instructions = f"Capturing dataset: {i + 1}/{n_pics}"
+
+            time.sleep(0.08)  # ~12.5 captures/sec max
+
+        with state.lock:
+            state.instructions = f"Done: saved {n_pics} pics to images/RGB and images/SEG"
+    finally:
+        with state.lock:
+            state.capture_in_progress = False
+
+
+def on_take_n_pics(count_var):
+    try:
+        n = int(count_var.get())
+    except ValueError:
+        messagebox.showwarning("Invalid number", "Enter an integer for N pics.")
+        return
+
+    if n <= 0:
+        messagebox.showwarning("Invalid number", "N must be > 0.")
+        return
+
+    t = threading.Thread(target=capture_dataset, args=(n,), daemon=True)
+    t.start()
+
+
 def build_tk_window():
     root = tk.Tk()
     root.title("Dual Camera Calibration + 3D Tracker")
-    root.geometry("680x260")
+    root.geometry("760x320")
 
     title = tk.Label(root, text="Table calibration and 3D red-dot tracking", font=("Segoe UI", 14, "bold"))
     title.pack(pady=8)
@@ -460,19 +537,24 @@ def build_tk_window():
     button_frame.pack(pady=10)
 
     b1 = tk.Button(button_frame, text="Start Calibration", width=18, command=start_calibration)
-    b1.grid(row=0, column=0, padx=8)
+    b1.grid(row=0, column=0, padx=6, pady=4)
 
     b_confirm = tk.Button(button_frame, text="Confirm Position", width=18, command=confirm_calibration_position)
-    b_confirm.grid(row=0, column=1, padx=8)
+    b_confirm.grid(row=0, column=1, padx=6, pady=4)
 
     b2 = tk.Button(button_frame, text="Load Saved Calibration", width=18,
                    command=lambda: messagebox.showinfo(
                        "Calibration", "Loaded." if load_calibration_if_available() else "No valid calibration file found."
                    ))
-    b2.grid(row=0, column=2, padx=8)
+    b2.grid(row=0, column=2, padx=6, pady=4)
 
     b3 = tk.Button(button_frame, text="Reset Calibration", width=18, command=reset_calibration)
-    b3.grid(row=0, column=3, padx=8)
+    b3.grid(row=0, column=3, padx=6, pady=4)
+
+    count_var = tk.StringVar(value="50")
+    tk.Label(button_frame, text="N:").grid(row=1, column=0, sticky="e")
+    tk.Entry(button_frame, width=10, textvariable=count_var).grid(row=1, column=1, sticky="w")
+    tk.Button(button_frame, text="Take N Pics", width=18, command=lambda: on_take_n_pics(count_var)).grid(row=1, column=2, padx=6, pady=4)
 
     root.protocol("WM_DELETE_WINDOW", lambda: close_app(root))
     return root, label_var, coord_var

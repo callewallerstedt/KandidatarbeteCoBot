@@ -82,6 +82,14 @@ This launches:
 
 The app tracks the red dot and shows estimated 3D coordinates in the Tkinter window.
 
+### Dataset capture in Tkinter
+
+Use the `N` input + **Take N Pics** button to capture dataset frames.
+
+Output folders (auto-created):
+- `images/RGB`  (raw RGB frames, cam1 + cam2)
+- `images/SEG`  (red-on-black segmentation masks, cam1 + cam2)
+
 ## Notes
 
 - Run Python app first, then start Unity Play mode.
