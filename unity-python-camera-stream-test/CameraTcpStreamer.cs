@@ -9,6 +9,12 @@ using UnityEngine.Rendering;
 [RequireComponent(typeof(Camera))]
 public class CameraTcpStreamer : MonoBehaviour
 {
+    public enum EncodeMode
+    {
+        JPG,
+        PNG
+    }
+
     [Header("Network")]
     public string host = "127.0.0.1";
     public int port = 5000;
@@ -17,6 +23,7 @@ public class CameraTcpStreamer : MonoBehaviour
     public int width = 1280;
     public int height = 720;
     [Range(1, 60)] public int fps = 24;
+    public EncodeMode encodeMode = EncodeMode.JPG;
     [Range(10, 100)] public int jpegQuality = 80;
 
     [Header("Performance")]
@@ -105,15 +112,18 @@ public class CameraTcpStreamer : MonoBehaviour
             encodeTex.LoadRawTextureData(data);
             encodeTex.Apply(false, false);
 
-            byte[] jpg = encodeTex.EncodeToJPG(jpegQuality);
-            if (jpg == null || jpg.Length == 0) return;
+            byte[] encoded = encodeMode == EncodeMode.PNG
+                ? encodeTex.EncodeToPNG()
+                : encodeTex.EncodeToJPG(jpegQuality);
+
+            if (encoded == null || encoded.Length == 0) return;
 
             while (frameQueue.Count >= maxQueueSize && frameQueue.TryDequeue(out _))
             {
                 // Drop oldest frame to keep latency down.
             }
 
-            frameQueue.Enqueue(jpg);
+            frameQueue.Enqueue(encoded);
             queueSignal.Set();
         }
         catch (Exception e)
@@ -135,15 +145,15 @@ public class CameraTcpStreamer : MonoBehaviour
                     continue;
                 }
 
-                if (!frameQueue.TryDequeue(out byte[] jpg))
+                if (!frameQueue.TryDequeue(out byte[] encoded))
                 {
                     queueSignal.WaitOne(50);
                     continue;
                 }
 
-                byte[] len = BitConverter.GetBytes(jpg.Length); // little-endian int32
+                byte[] len = BitConverter.GetBytes(encoded.Length); // little-endian int32
                 stream.Write(len, 0, 4);
-                stream.Write(jpg, 0, jpg.Length);
+                stream.Write(encoded, 0, encoded.Length);
             }
             catch (Exception e)
             {
