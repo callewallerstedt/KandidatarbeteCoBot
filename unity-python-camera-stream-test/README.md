@@ -46,11 +46,10 @@ This launches:
 ### Calibration flow (in app)
 
 1. Click **Start Calibration**.
-2. App asks for table corners in order: **TOP-LEFT, TOP-RIGHT, BOTTOM-RIGHT, BOTTOM-LEFT**.
-   - For each corner, click in **CAM 1** first, then **same point** in **CAM 2**.
-3. App then asks you to move the red Unity sphere to the same 4 corners but at **z = +1m** above table.
-   - Again click sphere in CAM 1 then CAM 2 for each corner.
-4. Calibration saves automatically to `calibration_data.json` and tracking starts.
+2. App prompts each position in this order: **TOP-LEFT, TOP-RIGHT, BOTTOM-LEFT, BOTTOM-RIGHT** on table.
+3. Move the red Unity sphere to the shown position, make sure it's visible in both cameras, then click **Confirm Position**.
+4. Repeat same order for in-air points at **z = +1m**.
+5. Calibration saves automatically to `calibration_data.json` and tracking starts.
 
 ### Coordinate system
 

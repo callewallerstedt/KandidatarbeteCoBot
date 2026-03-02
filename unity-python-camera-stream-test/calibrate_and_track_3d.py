@@ -44,19 +44,21 @@ class SharedState:
         self.mode = "idle"  # idle | calibrating | tracking
         self.instructions = "Press 'Start Calibration'"
 
-        # click state
-        self.awaiting_click = None  # dict or None
-        self.clicked_point = None   # (u, v)
+        # current red-dot detections from both cameras
+        self.latest_uv = [None, None]
+
+        # calibration sequence step index (0..7)
+        self.calib_step = 0
 
         # per camera calibration points
         self.cam_points = {
             0: {
-                "z0": [],  # 4 image points for table corners
-                "z1": [],  # 4 image points for elevated corners
+                "z0": [None] * 4,  # 4 image points for table corners
+                "z1": [None] * 4,  # 4 image points for elevated corners
             },
             1: {
-                "z0": [],
-                "z1": [],
+                "z0": [None] * 4,
+                "z1": [None] * 4,
             },
         }
 
@@ -222,63 +224,29 @@ def corner_name(i):
     return ["TOP-LEFT", "TOP-RIGHT", "BOTTOM-RIGHT", "BOTTOM-LEFT"][i]
 
 
-def wait_for_click_on_camera(cam_idx, prompt):
-    with state.lock:
-        state.awaiting_click = {"cam": cam_idx, "prompt": prompt}
-        state.clicked_point = None
-        state.instructions = prompt
+def get_step_info(step_idx):
+    # User-friendly order requested: TL, TR, BL, BR
+    order = [0, 1, 3, 2]
+    if step_idx < 4:
+        corner_idx = order[step_idx]
+        return "z0", corner_idx, f"Move RED dot to TABLE {corner_name(corner_idx)} and press 'Confirm Position'"
 
-    while running:
-        with state.lock:
-            p = state.clicked_point
-        if p is not None:
-            with state.lock:
-                state.clicked_point = None
-                state.awaiting_click = None
-            return p
-        time.sleep(0.01)
-    return None
+    corner_idx = order[step_idx - 4]
+    return "z1", corner_idx, f"Move RED dot to IN-AIR {corner_name(corner_idx)} (+1m) and press 'Confirm Position'"
 
 
-def run_calibration_sequence():
+def start_calibration():
     with state.lock:
         state.mode = "calibrating"
-        state.cam_points = {0: {"z0": [], "z1": []}, 1: {"z0": [], "z1": []}}
+        state.calib_step = 0
+        state.cam_points = {0: {"z0": [None] * 4, "z1": [None] * 4}, 1: {"z0": [None] * 4, "z1": [None] * 4}}
         state.H = {0: {"z0": None, "z1": None}, 1: {"z0": None, "z1": None}}
         state.last_3d = None
+        _, _, msg = get_step_info(0)
+        state.instructions = msg
 
-    # Phase 1: table corners on z=0
-    for i in range(4):
-        cn = corner_name(i)
-        p0 = wait_for_click_on_camera(0, f"Table corner {cn}: click in CAM 1")
-        if p0 is None:
-            return
-        state.cam_points[0]["z0"].append(p0)
 
-        p1 = wait_for_click_on_camera(1, f"Table corner {cn}: click SAME point in CAM 2")
-        if p1 is None:
-            return
-        state.cam_points[1]["z0"].append(p1)
-
-    # Phase 2: elevated corners at z=1 (move red sphere in Unity)
-    for i in range(4):
-        cn = corner_name(i)
-        p0 = wait_for_click_on_camera(
-            0,
-            f"Move RED sphere to {cn} at +1m (z=1). Click sphere in CAM 1",
-        )
-        if p0 is None:
-            return
-        state.cam_points[0]["z1"].append(p0)
-
-        p1 = wait_for_click_on_camera(
-            1,
-            f"Click SAME sphere position in CAM 2 ({cn} at z=1)",
-        )
-        if p1 is None:
-            return
-        state.cam_points[1]["z1"].append(p1)
-
+def finalize_calibration():
     try:
         for cam in [0, 1]:
             state.H[cam]["z0"] = build_homography_img_to_world(state.cam_points[cam]["z0"])
@@ -296,6 +264,34 @@ def run_calibration_sequence():
             state.mode = "idle"
             state.instructions = f"Calibration failed: {e}"
         messagebox.showerror("Calibration failed", str(e))
+
+
+def confirm_calibration_position():
+    with state.lock:
+        if state.mode != "calibrating":
+            messagebox.showinfo("Calibration", "Start calibration first.")
+            return
+
+        uv0 = state.latest_uv[0]
+        uv1 = state.latest_uv[1]
+        if uv0 is None or uv1 is None:
+            messagebox.showwarning("No red dot", "Red dot must be visible in BOTH camera windows before confirm.")
+            return
+
+        phase_key, corner_idx, _ = get_step_info(state.calib_step)
+        state.cam_points[0][phase_key][corner_idx] = [int(uv0[0]), int(uv0[1])]
+        state.cam_points[1][phase_key][corner_idx] = [int(uv1[0]), int(uv1[1])]
+        state.calib_step += 1
+
+        if state.calib_step >= 8:
+            done = True
+        else:
+            done = False
+            _, _, msg = get_step_info(state.calib_step)
+            state.instructions = msg
+
+    if done:
+        finalize_calibration()
 
 
 def save_calibration():
@@ -343,20 +339,6 @@ def load_calibration_if_available():
 # ---------------------------
 # UI + display loop
 # ---------------------------
-def on_mouse(event, x, y, flags, param):
-    cam_idx = param
-    if event != cv2.EVENT_LBUTTONDOWN:
-        return
-
-    with state.lock:
-        waiting = state.awaiting_click
-        if waiting is None:
-            return
-        if waiting["cam"] != cam_idx:
-            return
-        state.clicked_point = (int(x), int(y))
-
-
 def track_and_draw(frame, cam_idx):
     result = detect_red_dot(frame)
     if result is None:
@@ -385,8 +367,6 @@ def display_loop(root, label_var, coord_var):
 
     cv2.namedWindow(WINDOWS[0])
     cv2.namedWindow(WINDOWS[1])
-    cv2.setMouseCallback(WINDOWS[0], on_mouse, 0)
-    cv2.setMouseCallback(WINDOWS[1], on_mouse, 1)
 
     while running:
         frames = []
@@ -406,6 +386,7 @@ def display_loop(root, label_var, coord_var):
                 frames[i], uv[i] = track_and_draw(frames[i], i)
 
         with state.lock:
+            state.latest_uv = [uv[0], uv[1]]
             instr = state.instructions
             mode = state.mode
 
@@ -448,17 +429,13 @@ def display_loop(root, label_var, coord_var):
         pass
 
 
-def start_calibration_thread():
-    t = threading.Thread(target=run_calibration_sequence, daemon=True)
-    t.start()
-
-
 def reset_calibration():
     with state.lock:
         state.mode = "idle"
+        state.calib_step = 0
         state.instructions = "Calibration reset. Press 'Start Calibration'."
         state.H = {0: {"z0": None, "z1": None}, 1: {"z0": None, "z1": None}}
-        state.cam_points = {0: {"z0": [], "z1": []}, 1: {"z0": [], "z1": []}}
+        state.cam_points = {0: {"z0": [None] * 4, "z1": [None] * 4}, 1: {"z0": [None] * 4, "z1": [None] * 4}}
         state.last_3d = None
 
 
@@ -482,17 +459,20 @@ def build_tk_window():
     button_frame = tk.Frame(root)
     button_frame.pack(pady=10)
 
-    b1 = tk.Button(button_frame, text="Start Calibration", width=18, command=start_calibration_thread)
+    b1 = tk.Button(button_frame, text="Start Calibration", width=18, command=start_calibration)
     b1.grid(row=0, column=0, padx=8)
+
+    b_confirm = tk.Button(button_frame, text="Confirm Position", width=18, command=confirm_calibration_position)
+    b_confirm.grid(row=0, column=1, padx=8)
 
     b2 = tk.Button(button_frame, text="Load Saved Calibration", width=18,
                    command=lambda: messagebox.showinfo(
                        "Calibration", "Loaded." if load_calibration_if_available() else "No valid calibration file found."
                    ))
-    b2.grid(row=0, column=1, padx=8)
+    b2.grid(row=0, column=2, padx=8)
 
     b3 = tk.Button(button_frame, text="Reset Calibration", width=18, command=reset_calibration)
-    b3.grid(row=0, column=2, padx=8)
+    b3.grid(row=0, column=3, padx=8)
 
     root.protocol("WM_DELETE_WINDOW", lambda: close_app(root))
     return root, label_var, coord_var
