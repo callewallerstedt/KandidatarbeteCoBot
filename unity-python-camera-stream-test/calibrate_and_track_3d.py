@@ -209,6 +209,14 @@ def make_red_on_black_mask_image(frame_bgr):
     return out
 
 
+def force_red_mask_from_any_mask_image(mask_like_bgr, threshold=10):
+    # Converts any masked/shaded input (gray, lit, etc.) into pure red-on-black.
+    gray = cv2.cvtColor(mask_like_bgr, cv2.COLOR_BGR2GRAY)
+    out = np.zeros_like(mask_like_bgr)
+    out[gray > threshold] = (0, 0, 255)  # BGR pure red
+    return out
+
+
 def detect_red_dot(frame_bgr):
     mask = get_red_binary_mask(frame_bgr)
 
@@ -486,8 +494,9 @@ def capture_dataset(n_pics):
                 continue
 
             # Prefer true mask streams from Unity (ports 6000/6001). Fallback to HSV-generated masks.
-            seg0 = s0 if s0 is not None else make_red_on_black_mask_image(f0)
-            seg1 = s1 if s1 is not None else make_red_on_black_mask_image(f1)
+            # Always normalize to pure red-on-black output for training consistency.
+            seg0 = force_red_mask_from_any_mask_image(s0) if s0 is not None else make_red_on_black_mask_image(f0)
+            seg1 = force_red_mask_from_any_mask_image(s1) if s1 is not None else make_red_on_black_mask_image(f1)
 
             cv2.imwrite(str(rgb_dir / f"{stamp}_cam1_{i:04d}.png"), f0)
             cv2.imwrite(str(rgb_dir / f"{stamp}_cam2_{i:04d}.png"), f1)
