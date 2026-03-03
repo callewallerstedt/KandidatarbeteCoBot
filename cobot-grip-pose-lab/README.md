@@ -24,6 +24,30 @@ pip install -r requirements.txt
 python app.py
 ```
 
+## Unity setup (exact)
+Copy scripts from `unity-scripts/` into your Unity project:
+- `GripAnnotatable.cs`
+- `ObjectBoxRandomizer.cs`
+- `GripPoseExporter.cs`
+- `DatasetCaptureController.cs`
+
+### Scene wiring
+1. Add `ObjectBoxRandomizer` to an empty GameObject (e.g. `RandomizerRoot`).
+   - Set `boxCenter` + `boxSize` to your bin region.
+   - Add all target object transforms in `objects`.
+2. On each target object, add `GripAnnotatable`.
+   - Set `classId`
+   - Assign `centerPoint`, `gripPointA`, `gripPointB` transforms.
+   - (Optional) set explicit renderers.
+3. Add `GripPoseExporter` to another GameObject.
+   - Assign `renderCamera` (cobot head-camera simulation).
+   - Add all `GripAnnotatable` objects to `objects` list.
+   - Set `outputRoot` (e.g. `D:/unity_export`).
+4. Add `DatasetCaptureController`.
+   - Link `randomizer` + `exporter`.
+   - Set `framesToCapture`.
+   - Click `Start Capture` from Inspector context menu (or enable `autoStart`).
+
 ## Expected Unity export layout
 ```
 unity_export/
@@ -51,4 +75,7 @@ JSON per frame (example):
 }
 ```
 
-Visibility flag: `0/1/2` (YOLO pose style).
+Then in this lab GUI:
+1. Tab 1: choose Unity export folder and convert
+2. Tab 2: train pose model
+3. Tab 3: run inference (grip line + angle)
