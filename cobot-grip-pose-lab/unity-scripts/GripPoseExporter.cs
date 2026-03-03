@@ -6,6 +6,8 @@ using UnityEngine;
 public class GripPoseExporter : MonoBehaviour
 {
     public Camera renderCamera;
+    [Header("Optional mask camera (renders red object on black)")]
+    public Camera maskCamera;
     public string outputRoot = "unity_export";
     public int width = 1920;
     public int height = 1080;
@@ -36,6 +38,7 @@ public class GripPoseExporter : MonoBehaviour
     private void EnsureDirs()
     {
         Directory.CreateDirectory(Path.Combine(outputRoot, "RGB"));
+        Directory.CreateDirectory(Path.Combine(outputRoot, "MASK"));
         Directory.CreateDirectory(Path.Combine(outputRoot, "annotations"));
     }
 
@@ -51,8 +54,11 @@ public class GripPoseExporter : MonoBehaviour
 
         string imageName = $"frame_{frameIndex:D6}.png";
         string rgbPath = Path.Combine(outputRoot, "RGB", imageName);
+        string maskPath = Path.Combine(outputRoot, "MASK", imageName);
 
-        SaveCameraPng(rgbPath);
+        SaveCameraPng(renderCamera, rgbPath);
+        if (maskCamera != null)
+            SaveCameraPng(maskCamera, maskPath);
 
         FrameAnn ann = new FrameAnn { image = imageName, width = width, height = height };
 
@@ -89,22 +95,23 @@ public class GripPoseExporter : MonoBehaviour
 
         string jsonPath = Path.Combine(outputRoot, "annotations", $"frame_{frameIndex:D6}.json");
         File.WriteAllText(jsonPath, JsonUtility.ToJson(ann, true));
+        Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} rgb={rgbPath}" + (maskCamera != null ? $" mask={maskPath}" : " (no maskCamera set)") + $" ann={jsonPath}");
     }
 
-    private void SaveCameraPng(string outPath)
+    private void SaveCameraPng(Camera cam, string outPath)
     {
         var rt = new RenderTexture(width, height, 24);
-        renderCamera.targetTexture = rt;
+        cam.targetTexture = rt;
         var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
 
-        renderCamera.Render();
+        cam.Render();
         RenderTexture.active = rt;
         tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
         tex.Apply();
 
         File.WriteAllBytes(outPath, tex.EncodeToPNG());
 
-        renderCamera.targetTexture = null;
+        cam.targetTexture = null;
         RenderTexture.active = null;
         Destroy(rt);
         Destroy(tex);

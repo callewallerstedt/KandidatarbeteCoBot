@@ -41,6 +41,7 @@ Copy scripts from `unity-scripts/` into your Unity project:
    - (Optional) set explicit renderers.
 3. Add `GripPoseExporter` to another GameObject.
    - Assign `renderCamera` (cobot head-camera simulation).
+   - Assign `maskCamera` (second camera that renders red-object-on-black only).
    - Add all `GripAnnotatable` objects to `objects` list.
    - Set `outputRoot` (e.g. `D:/unity_export`).
 4. Add `DatasetCaptureController`.
@@ -52,6 +53,7 @@ Copy scripts from `unity-scripts/` into your Unity project:
    - Link `randomizer` + `exporter`.
    - Set `unityExportRoot` to same folder used by the GUI.
    - It polls `<unityExportRoot>/_commands/next_command.json`.
+   - It sets `Application.runInBackground=true`, so commands work even when Unity window is not focused.
 
 ## Expected Unity export layout
 ```

@@ -26,6 +26,7 @@ public class UnityCommandBridge : MonoBehaviour
 
     private void Start()
     {
+        Application.runInBackground = true;
         StartCoroutine(PollLoop());
     }
 
