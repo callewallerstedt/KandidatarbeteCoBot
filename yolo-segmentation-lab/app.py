@@ -123,6 +123,23 @@ class App(tk.Tk):
         self.log.see('end')
         self.update_idletasks()
 
+    def _stream_proc_output(self, p):
+        buf = ''
+        while True:
+            ch = p.stdout.read(1)
+            if ch == '' and p.poll() is not None:
+                break
+            if not ch:
+                continue
+            if ch in ('\n', '\r'):
+                if buf.strip():
+                    self.log_line(buf.rstrip())
+                buf = ''
+            else:
+                buf += ch
+        if buf.strip():
+            self.log_line(buf.rstrip())
+
     def run_cmd(self, cmd, cwd=ROOT):
         self.log_line('> ' + ' '.join(map(str, cmd)))
 
@@ -135,9 +152,9 @@ class App(tk.Tk):
                 text=True,
                 encoding='utf-8',
                 errors='replace',
+                bufsize=1,
             )
-            for line in p.stdout:
-                self.log_line(line.rstrip())
+            self._stream_proc_output(p)
             rc = p.wait()
             self.log_line(f'[exit {rc}]')
 
@@ -155,9 +172,9 @@ class App(tk.Tk):
                     text=True,
                     encoding='utf-8',
                     errors='replace',
+                    bufsize=1,
                 )
-                for line in p.stdout:
-                    self.log_line(line.rstrip())
+                self._stream_proc_output(p)
                 rc = p.wait()
                 self.log_line(f'[exit {rc}]')
                 if rc != 0:
