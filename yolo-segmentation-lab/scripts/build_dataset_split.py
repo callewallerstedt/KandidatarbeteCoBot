@@ -14,8 +14,8 @@ def main():
     ap.add_argument('--val', type=float, default=0.1)
     ap.add_argument('--test', type=float, default=0.1)
     ap.add_argument('--seed', type=int, default=42)
-    ap.add_argument('--mode', choices=['all', 'real', 'synth', 'obs'], default='all',
-                    help='all: all pairs, real: exclude *_synth_* and *_obs_*, synth: only *_synth_*, obs: only *_obs_*')
+    ap.add_argument('--mode', choices=['all', 'real', 'synth', 'obs', 'unity'], default='all',
+                    help='all: all pairs, real: exclude synth/obs/unity, synth: only synth_runs, obs: only obs_runs, unity: only unity_runs')
     ap.add_argument('--class-name', default='', help='Optional single class folder name to include (e.g. bottle). Empty = all classes')
     ap.add_argument('--run-name', default='', help='Optional run folder filter (e.g. run_20260227_120000)')
     args = ap.parse_args()
@@ -59,13 +59,16 @@ def main():
                 skipped_overlay_like += 1
                 continue
 
-            is_synth = ('_synth_' in stem) or ('synth_runs' in rel.parts)
+            is_synth = ('_synth_' in stem) or ('synth_runs' in rel.parts) or ('synth_multi_runs' in rel.parts)
             is_obs = ('_obs_' in stem) or ('obs_runs' in rel.parts)
-            if args.mode == 'real' and (is_synth or is_obs):
+            is_unity = ('unity_runs' in rel.parts) or ('_unity_' in stem)
+            if args.mode == 'real' and (is_synth or is_obs or is_unity):
                 continue
             if args.mode == 'synth' and not is_synth:
                 continue
             if args.mode == 'obs' and not is_obs:
+                continue
+            if args.mode == 'unity' and not is_unity:
                 continue
             if run_filter and run_filter not in rel_str:
                 continue

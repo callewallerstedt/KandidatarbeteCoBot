@@ -336,6 +336,10 @@ class App(tk.Tk):
         self.split_class_var = tk.StringVar(value='ALL classes')
         self.split_run_var = tk.StringVar(value='')
         self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
+        self.unity_rgb_dir_var = tk.StringVar()
+        self.unity_mask_dir_var = tk.StringVar()
+        self.unity_run_var = tk.StringVar(value='')
+        self.unity_red_thr_var = tk.StringVar(value='120')
 
         ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.video_var, width=70).grid(row=0, column=1, sticky='we')
@@ -366,25 +370,41 @@ class App(tk.Tk):
 
         ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=8, column=0, pady=8)
 
-        ttk.Label(frm, text='Split mode').grid(row=9, column=1, sticky='e')
-        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs'], state='readonly', width=10).grid(row=9, column=2, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=9, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='Unity RGB folder').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_rgb_dir_var, width=70).grid(row=10, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_unity_rgb_dir).grid(row=10, column=2)
 
-        ttk.Label(frm, text='Split class').grid(row=10, column=0, sticky='w')
+        ttk.Label(frm, text='Unity RED mask folder').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_mask_dir_var, width=70).grid(row=11, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_unity_mask_dir).grid(row=11, column=2)
+
+        ttk.Label(frm, text='Unity run name (optional)').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=12, column=1, sticky='w')
+        ttk.Label(frm, text='Red threshold').grid(row=12, column=1, padx=(320,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_red_thr_var, width=8).grid(row=12, column=2, sticky='w')
+
+        ttk.Button(frm, text='Import Unity RGB + red masks', command=self.import_unity_red_masks).grid(row=13, column=0, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Split mode').grid(row=14, column=1, sticky='e')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs', 'unity'], state='readonly', width=10).grid(row=14, column=2, sticky='w')
+
+        ttk.Label(frm, text='Split class').grid(row=15, column=0, sticky='w')
         self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
-        self.split_class_cb.grid(row=10, column=1, sticky='w')
+        self.split_class_cb.grid(row=15, column=1, sticky='w')
 
-        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=11, column=1, sticky='w')
+        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=16, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=16, column=1, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs | synth = only synth_runs | obs = only obs_runs').grid(row=12, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=13, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='all = all data | real = no synth/obs/unity | synth = synth runs | obs = obs runs | unity = unity runs').grid(row=17, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=18, column=0, pady=8, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=14, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Separator(frm, orient='horizontal').grid(row=19, column=0, columnspan=3, sticky='we', pady=8)
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=15, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=15, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=15, column=2)
-        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=16, column=0, pady=6, sticky='w')
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=20, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=20, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=20, column=2)
+        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=21, column=0, pady=6, sticky='w')
 
         frm.columnconfigure(1, weight=1)
 
@@ -1122,6 +1142,16 @@ class App(tk.Tk):
         if p:
             self.bg_dir_var.set(p)
 
+    def pick_unity_rgb_dir(self):
+        p = filedialog.askdirectory(title='Select Unity RGB folder')
+        if p:
+            self.unity_rgb_dir_var.set(p)
+
+    def pick_unity_mask_dir(self):
+        p = filedialog.askdirectory(title='Select Unity red-mask folder')
+        if p:
+            self.unity_mask_dir_var.set(p)
+
     def pick_synth_multi_bg_dir(self):
         p = filedialog.askdirectory(title='Select background images folder for multi-instance synth')
         if p:
@@ -1176,6 +1206,25 @@ class App(tk.Tk):
             '--aug-per-frame', self.aug_var.get(),
             '--mask-quality', self.mask_quality_var.get(),
         ]
+        self.run_cmd(cmd)
+        self.after(1000, self.refresh_class_options)
+
+    def import_unity_red_masks(self):
+        if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
+            return
+        if not self.unity_rgb_dir_var.get().strip() or not self.unity_mask_dir_var.get().strip():
+            self.log_line('Please select both Unity RGB and Unity RED mask folders first.')
+            return
+        cmd = [
+            str(PY), 'scripts/import_unity_red_masks.py',
+            '--rgb-dir', self.unity_rgb_dir_var.get().strip(),
+            '--mask-dir', self.unity_mask_dir_var.get().strip(),
+            '--class-name', self.class_var.get(),
+            '--class-id', self.class_id_var.get(),
+            '--red-threshold', self.unity_red_thr_var.get(),
+        ]
+        if self.unity_run_var.get().strip():
+            cmd.extend(['--run-name', self.unity_run_var.get().strip()])
         self.run_cmd(cmd)
         self.after(1000, self.refresh_class_options)
 
