@@ -118,6 +118,10 @@ class App(tk.Tk):
         self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var)
         self.auto_assign_class_id(self.manual_class_var, self.manual_class_id_var)
 
+        self._load_ui_state()
+        self.after(2000, self._autosave_ui_state)
+        self.protocol('WM_DELETE_WINDOW', self._on_close)
+
     def log_line(self, text):
         self.log.insert('end', text + '\n')
         self.log.see('end')
@@ -139,6 +143,67 @@ class App(tk.Tk):
                 buf += ch
         if buf.strip():
             self.log_line(buf.rstrip())
+
+    def _ui_state_path(self):
+        return ROOT / '.ui_state.json'
+
+    def _ui_state_vars(self):
+        return {
+            'class_var': self.class_var,
+            'class_id_var': self.class_id_var,
+            'split_mode_var': self.split_mode_var,
+            'split_class_var': self.split_class_var,
+            'split_run_var': self.split_run_var,
+            'model_var': self.model_var,
+            'epochs_var': self.epochs_var,
+            'imgsz_var': self.imgsz_var,
+            'batch_var': self.batch_var,
+            'workers_var': self.workers_var,
+            'weights_var': self.weights_var,
+            'source_var': self.source_var,
+            'infer_imgsz_var': self.infer_imgsz_var,
+            'infer_conf_var': self.infer_conf_var,
+            'mask_smooth_var': self.mask_smooth_var,
+            'grip_model_var': self.grip_model_var,
+            'grip_conf_var': self.grip_conf_var,
+            'unity_tcp_port_var': self.unity_tcp_port_var,
+            'hc_unity_dir_var': self.hc_unity_dir_var,
+            'hc_run_var': self.hc_run_var,
+            'hc_capture_n_var': self.hc_capture_n_var,
+            'hc_capture_profile_var': self.hc_capture_profile_var,
+            'hc_seg_model_var': self.hc_seg_model_var,
+            'hc_pose_model_var': self.hc_pose_model_var,
+        }
+
+    def _save_ui_state(self):
+        try:
+            data = {k: v.get() for k, v in self._ui_state_vars().items()}
+            self._ui_state_path().write_text(json.dumps(data, indent=2), encoding='utf-8')
+        except Exception:
+            pass
+
+    def _load_ui_state(self):
+        p = self._ui_state_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text(encoding='utf-8'))
+            for k, var in self._ui_state_vars().items():
+                if k in data:
+                    try:
+                        var.set(data[k])
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _autosave_ui_state(self):
+        self._save_ui_state()
+        self.after(2000, self._autosave_ui_state)
+
+    def _on_close(self):
+        self._save_ui_state()
+        self.destroy()
 
     def run_cmd(self, cmd, cwd=ROOT):
         self.log_line('> ' + ' '.join(map(str, cmd)))
@@ -1060,6 +1125,7 @@ class App(tk.Tk):
         ttk.Checkbutton(frm, text='Enable grip keypoint overlay', variable=self.grip_pose_var).grid(row=14, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.grip_model_var, width=55).grid(row=14, column=1, sticky='we')
         ttk.Entry(frm, textvariable=self.grip_conf_var, width=8).grid(row=14, column=2, sticky='w')
+        ttk.Button(frm, text='Browse pose model', command=self.pick_grip_model).grid(row=14, column=2, padx=(70,0), sticky='w')
 
         ttk.Checkbutton(frm, text='Use Unity TCP source', variable=self.unity_tcp_var).grid(row=15, column=0, sticky='w')
         ttk.Label(frm, text='TCP port').grid(row=15, column=1, sticky='e')
@@ -1153,6 +1219,11 @@ class App(tk.Tk):
         p = filedialog.askopenfilename(title='Select inference video source')
         if p:
             self.source_var.set(p)
+
+    def pick_grip_model(self):
+        p = filedialog.askopenfilename(title='Select grip pose model weights', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
+        if p:
+            self.grip_model_var.set(p)
 
     def pick_train_model(self):
         p = filedialog.askopenfilename(title='Select model/weights for training', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])

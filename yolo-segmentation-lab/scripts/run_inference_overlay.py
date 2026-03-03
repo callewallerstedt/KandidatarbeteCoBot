@@ -136,10 +136,10 @@ def main():
             c = tuple(np.round(person[0]).astype(int))
             a = tuple(np.round(person[1]).astype(int))
             b = tuple(np.round(person[2]).astype(int))
-            cv2.line(out, a, b, (0, 255, 255), 3, cv2.LINE_AA)
-            cv2.circle(out, c, 5, (255, 255, 255), -1, cv2.LINE_AA)
-            cv2.circle(out, a, 6, (0, 255, 0), -1, cv2.LINE_AA)
-            cv2.circle(out, b, 6, (0, 0, 255), -1, cv2.LINE_AA)
+            cv2.line(out, a, b, (0, 255, 255), 2, cv2.LINE_AA)
+            cv2.circle(out, c, 3, (255, 255, 255), -1, cv2.LINE_AA)
+            cv2.circle(out, a, 3, (0, 255, 0), -1, cv2.LINE_AA)
+            cv2.circle(out, b, 3, (0, 0, 255), -1, cv2.LINE_AA)
         return out
 
     def draw_human_arm_overlay(frame, pose_r):
