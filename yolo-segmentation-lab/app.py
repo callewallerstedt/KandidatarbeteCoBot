@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import json
 import threading
 import subprocess
 from pathlib import Path
@@ -1043,6 +1044,7 @@ class App(tk.Tk):
         self.hc_run_var = tk.StringVar(value='headcam01')
         self.hc_red_thr_var = tk.StringVar(value='120')
         self.hc_pose_train_ratio_var = tk.StringVar(value='0.90')
+        self.hc_capture_n_var = tk.StringVar(value='200')
 
         self.hc_seg_model_var = tk.StringVar(value='yolo11s-seg.pt')
         self.hc_seg_epochs_var = tk.StringVar(value='100')
@@ -1068,31 +1070,37 @@ class App(tk.Tk):
         ttk.Label(frm, text='Pose train ratio').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.hc_pose_train_ratio_var, width=10).grid(row=2, column=1, sticky='w')
 
-        ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=3, column=0, pady=8, sticky='w')
-        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=3, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Unity capture N').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_capture_n_var, width=10).grid(row=3, column=1, sticky='w')
+        ttk.Button(frm, text='Unity test randomize once', command=self.headcam_unity_randomize_once).grid(row=3, column=1, padx=(90,0), sticky='w')
+        ttk.Button(frm, text='Unity capture 1', command=self.headcam_unity_capture_one).grid(row=3, column=2, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=4, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Button(frm, text='Unity capture N', command=self.headcam_unity_capture_n).grid(row=4, column=0, pady=6, sticky='w')
+        ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=4, column=1, pady=6, sticky='w')
+        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=4, column=2, pady=6, sticky='w')
 
-        ttk.Label(frm, text='SEG model').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_model_var).grid(row=5, column=1, sticky='we')
-        ttk.Label(frm, text='SEG epochs/imgsz/batch').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_epochs_var, width=8).grid(row=6, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_imgsz_var, width=8).grid(row=6, column=1, padx=(70,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_batch_var, width=8).grid(row=6, column=1, padx=(140,0), sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='we', pady=8)
 
-        ttk.Label(frm, text='POSE model').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_model_var).grid(row=7, column=1, sticky='we')
-        ttk.Label(frm, text='POSE epochs/imgsz/batch').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_epochs_var, width=8).grid(row=8, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_imgsz_var, width=8).grid(row=8, column=1, padx=(70,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_batch_var, width=8).grid(row=8, column=1, padx=(140,0), sticky='w')
+        ttk.Label(frm, text='SEG model').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_model_var).grid(row=6, column=1, sticky='we')
+        ttk.Label(frm, text='SEG epochs/imgsz/batch').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_epochs_var, width=8).grid(row=7, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_imgsz_var, width=8).grid(row=7, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_batch_var, width=8).grid(row=7, column=1, padx=(140,0), sticky='w')
 
-        ttk.Label(frm, text='Device/workers').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=9, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=9, column=1, padx=(70,0), sticky='w')
+        ttk.Label(frm, text='POSE model').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_model_var).grid(row=8, column=1, sticky='we')
+        ttk.Label(frm, text='POSE epochs/imgsz/batch').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_epochs_var, width=8).grid(row=9, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_imgsz_var, width=8).grid(row=9, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_batch_var, width=8).grid(row=9, column=1, padx=(140,0), sticky='w')
 
-        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=10, column=0, pady=10, sticky='w')
-        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=11, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Device/workers').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=10, column=1, padx=(70,0), sticky='w')
+
+        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=11, column=0, pady=10, sticky='w')
+        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=12, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -1272,6 +1280,39 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title='Select Unity export root (RGB/MASK/annotations)')
         if p:
             self.hc_unity_dir_var.set(p)
+
+    def _headcam_write_unity_command(self, command, count=1):
+        unity_dir = self.hc_unity_dir_var.get().strip()
+        if not unity_dir:
+            self.log_line('HeadCam: select Unity export folder first.')
+            return False
+        u = Path(unity_dir)
+        cmd_dir = u / '_commands'
+        cmd_dir.mkdir(parents=True, exist_ok=True)
+        cmd_path = cmd_dir / 'next_command.json'
+        payload = {
+            'command': command,
+            'count': int(max(1, count)),
+            'run_name': (self.hc_run_var.get().strip() or 'headcam01'),
+            'timestamp': int(__import__('time').time()),
+        }
+        cmd_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+        self.log_line(f'Unity command written: {cmd_path} -> {payload}')
+        self.log_line('Unity side must run a command-bridge script that polls _commands/next_command.json')
+        return True
+
+    def headcam_unity_randomize_once(self):
+        self._headcam_write_unity_command('randomize_once', 1)
+
+    def headcam_unity_capture_one(self):
+        self._headcam_write_unity_command('capture', 1)
+
+    def headcam_unity_capture_n(self):
+        try:
+            n = int(self.hc_capture_n_var.get())
+        except Exception:
+            n = 200
+        self._headcam_write_unity_command('capture', n)
 
     def headcam_validate_unity_bundle(self):
         unity_dir = self.hc_unity_dir_var.get().strip()

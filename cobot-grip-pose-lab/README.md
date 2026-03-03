@@ -48,6 +48,11 @@ Copy scripts from `unity-scripts/` into your Unity project:
    - Set `framesToCapture`.
    - Click `Start Capture` from Inspector context menu (or enable `autoStart`).
 
+5. (Optional, recommended) Add `UnityCommandBridge` for remote control from Tkinter GUI.
+   - Link `randomizer` + `exporter`.
+   - Set `unityExportRoot` to same folder used by the GUI.
+   - It polls `<unityExportRoot>/_commands/next_command.json`.
+
 ## Expected Unity export layout
 ```
 unity_export/
