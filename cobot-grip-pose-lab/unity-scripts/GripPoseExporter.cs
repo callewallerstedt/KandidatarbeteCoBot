@@ -122,12 +122,12 @@ public class GripPoseExporter : MonoBehaviour
                 continue;
             }
 
-            Vector3 c = renderCamera.WorldToViewportPoint(obj.centerPoint.position);
-            Vector3 a = renderCamera.WorldToViewportPoint(obj.gripPointA.position);
-            Vector3 b = renderCamera.WorldToViewportPoint(obj.gripPointB.position);
+            bool okC = ProjectWorldToImage(renderCamera, obj.centerPoint.position, out float cx, out float cy);
+            bool okA = ProjectWorldToImage(renderCamera, obj.gripPointA.position, out float ax, out float ay);
+            bool okB = ProjectWorldToImage(renderCamera, obj.gripPointB.position, out float bx, out float by);
 
-            // Skip if keypoints behind camera
-            if (c.z <= 0f || a.z <= 0f || b.z <= 0f)
+            // Skip if keypoints outside/behind camera
+            if (!okC || !okA || !okB)
             {
                 behindCam++;
                 continue;
@@ -139,13 +139,13 @@ public class GripPoseExporter : MonoBehaviour
                 continue;
             }
 
-            // Viewport -> image pixel coordinates (top-left origin for exported labels)
-            float cx = Mathf.Clamp(c.x * width, 0, width - 1);
-            float cy = Mathf.Clamp((1f - c.y) * height, 0, height - 1);
-            float ax = Mathf.Clamp(a.x * width, 0, width - 1);
-            float ay = Mathf.Clamp((1f - a.y) * height, 0, height - 1);
-            float bx = Mathf.Clamp(b.x * width, 0, width - 1);
-            float by = Mathf.Clamp((1f - b.y) * height, 0, height - 1);
+            // Clamp to final image bounds
+            cx = Mathf.Clamp(cx, 0, width - 1);
+            cy = Mathf.Clamp(cy, 0, height - 1);
+            ax = Mathf.Clamp(ax, 0, width - 1);
+            ay = Mathf.Clamp(ay, 0, height - 1);
+            bx = Mathf.Clamp(bx, 0, width - 1);
+            by = Mathf.Clamp(by, 0, height - 1);
 
             ann.objects.Add(new ObjAnn
             {
@@ -269,6 +269,23 @@ public class GripPoseExporter : MonoBehaviour
         Destroy(tex);
     }
 
+    private bool ProjectWorldToImage(Camera cam, Vector3 world, out float px, out float py)
+    {
+        px = py = 0f;
+        Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
+        Vector4 clip = vp * new Vector4(world.x, world.y, world.z, 1f);
+        if (clip.w <= 1e-6f) return false;
+
+        float ndcX = clip.x / clip.w;
+        float ndcY = clip.y / clip.w;
+        float ndcZ = clip.z / clip.w;
+        if (ndcZ < -1f || ndcZ > 1f) return false;
+
+        px = (ndcX * 0.5f + 0.5f) * width;
+        py = (1f - (ndcY * 0.5f + 0.5f)) * height;
+        return true;
+    }
+
     private bool TryProjectBounds(Bounds b, out float x1, out float y1, out float x2, out float y2)
     {
         x1 = float.MaxValue; y1 = float.MaxValue;
@@ -291,11 +308,8 @@ public class GripPoseExporter : MonoBehaviour
         bool anyFront = false;
         foreach (var p in pts)
         {
-            Vector3 sp = renderCamera.WorldToViewportPoint(p);
-            if (sp.z <= 0f) continue;
+            if (!ProjectWorldToImage(renderCamera, p, out float px, out float py)) continue;
             anyFront = true;
-            float px = sp.x * width;
-            float py = (1f - sp.y) * height;
             x1 = Mathf.Min(x1, px);
             x2 = Mathf.Max(x2, px);
             y1 = Mathf.Min(y1, py);
