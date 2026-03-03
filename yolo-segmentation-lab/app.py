@@ -1002,6 +1002,8 @@ class App(tk.Tk):
         self.human_conf_var = tk.StringVar(value='0.20')
         self.human_alpha_var = tk.StringVar(value='0.30')
         self.mask_smooth_var = tk.StringVar(value='2')
+        self.unity_tcp_var = tk.BooleanVar(value=False)
+        self.unity_tcp_port_var = tk.StringVar(value='5000')
 
         ttk.Label(frm, text='Weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
@@ -1052,7 +1054,11 @@ class App(tk.Tk):
         ttk.Label(frm, text='Mask smooth (0 off)').grid(row=13, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.mask_smooth_var, width=8).grid(row=13, column=1, sticky='w')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=14, column=0, pady=8)
+        ttk.Checkbutton(frm, text='Use Unity TCP source', variable=self.unity_tcp_var).grid(row=14, column=0, sticky='w')
+        ttk.Label(frm, text='TCP port').grid(row=14, column=1, sticky='e')
+        ttk.Entry(frm, textvariable=self.unity_tcp_port_var, width=8).grid(row=14, column=2, sticky='w')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=15, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_headcam_tab(self):
@@ -1390,6 +1396,7 @@ class App(tk.Tk):
             '--batch', self.hc_seg_batch_var.get(),
             '--device', self.hc_device_var.get(),
             '--workers', self.hc_workers_var.get(),
+            '--mosaic', '0.0',
             '--name', f'headcam_seg_{run}',
         ]
 
@@ -1891,6 +1898,19 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def infer(self):
+        if self.unity_tcp_var.get():
+            cmd = [
+                str(PY), 'scripts/run_inference_overlay_tcp.py',
+                '--weights', self.weights_var.get(),
+                '--port', self.unity_tcp_port_var.get(),
+                '--imgsz', self.infer_imgsz_var.get(),
+                '--conf', self.infer_conf_var.get(),
+                '--device', self.infer_device_var.get(),
+                '--mask-smooth', self.mask_smooth_var.get(),
+            ]
+            self.run_cmd(cmd)
+            return
+
         cmd = [
             str(PY), 'scripts/run_inference_overlay.py',
             '--weights', self.weights_var.get(),

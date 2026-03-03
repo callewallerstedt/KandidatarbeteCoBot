@@ -16,6 +16,7 @@ def main():
     ap.add_argument('--project', default=str(Path(__file__).resolve().parents[1] / 'runs' / 'segment'))
     ap.add_argument('--name', default='train')
     ap.add_argument('--workers', type=int, default=(0 if os.name == 'nt' else 4))
+    ap.add_argument('--mosaic', type=float, default=1.0, help='Mosaic augmentation probability (set 0 to disable merged training images)')
     args = ap.parse_args()
 
     model = YOLO(args.model)
@@ -29,6 +30,7 @@ def main():
         name=args.name,
         task='segment',
         workers=args.workers,
+        mosaic=args.mosaic,
     )
 
 
