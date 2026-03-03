@@ -162,35 +162,29 @@ public class GripPoseExporter : MonoBehaviour
     {
         if (renderCamera == null) return;
 
-        var oldClear = renderCamera.clearFlags;
-        var oldBg = renderCamera.backgroundColor;
-        var oldHdr = renderCamera.allowHDR;
-        var oldMsaa = renderCamera.allowMSAA;
-        var oldMask = renderCamera.cullingMask;
+        var go = new GameObject("__TempMaskCam");
+        var tempCam = go.AddComponent<Camera>();
+        tempCam.CopyFrom(renderCamera);
 
         int layer = LayerMask.NameToLayer(maskLayerName);
         if (layer >= 0)
-            renderCamera.cullingMask = 1 << layer;
+            tempCam.cullingMask = 1 << layer;
 
-        renderCamera.clearFlags = CameraClearFlags.SolidColor;
-        renderCamera.backgroundColor = Color.black;
-        renderCamera.allowHDR = false;
-        renderCamera.allowMSAA = false;
+        tempCam.clearFlags = CameraClearFlags.SolidColor;
+        tempCam.backgroundColor = Color.black;
+        tempCam.allowHDR = false;
+        tempCam.allowMSAA = false;
 
         if (maskShader == null)
             maskShader = Shader.Find("Hidden/ObjectMaskRed");
 
         if (maskShader != null)
-            renderCamera.SetReplacementShader(maskShader, "");
+            tempCam.SetReplacementShader(maskShader, "");
 
-        SaveCameraPng(renderCamera, outPath);
+        SaveCameraPng(tempCam, outPath);
 
-        renderCamera.ResetReplacementShader();
-        renderCamera.clearFlags = oldClear;
-        renderCamera.backgroundColor = oldBg;
-        renderCamera.allowHDR = oldHdr;
-        renderCamera.allowMSAA = oldMsaa;
-        renderCamera.cullingMask = oldMask;
+        tempCam.ResetReplacementShader();
+        Destroy(go);
     }
 
     private void SaveCameraPng(Camera cam, string outPath)
