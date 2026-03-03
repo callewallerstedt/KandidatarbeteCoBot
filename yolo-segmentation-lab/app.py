@@ -336,8 +336,7 @@ class App(tk.Tk):
         self.split_class_var = tk.StringVar(value='ALL classes')
         self.split_run_var = tk.StringVar(value='')
         self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
-        self.unity_rgb_dir_var = tk.StringVar()
-        self.unity_mask_dir_var = tk.StringVar()
+        self.unity_dir_var = tk.StringVar()
         self.unity_run_var = tk.StringVar(value='')
         self.unity_red_thr_var = tk.StringVar(value='120')
 
@@ -371,13 +370,11 @@ class App(tk.Tk):
         ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=8, column=0, pady=8)
 
         ttk.Separator(frm, orient='horizontal').grid(row=9, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='Unity RGB folder').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_rgb_dir_var, width=70).grid(row=10, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_unity_rgb_dir).grid(row=10, column=2)
+        ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_dir_var, width=70).grid(row=10, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_unity_dir).grid(row=10, column=2)
 
-        ttk.Label(frm, text='Unity RED mask folder').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_mask_dir_var, width=70).grid(row=11, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_unity_mask_dir).grid(row=11, column=2)
+        ttk.Label(frm, text='Pairing is automatic by relative path/name (single folder workflow)').grid(row=11, column=0, columnspan=3, sticky='w')
 
         ttk.Label(frm, text='Unity run name (optional)').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=12, column=1, sticky='w')
@@ -1142,15 +1139,10 @@ class App(tk.Tk):
         if p:
             self.bg_dir_var.set(p)
 
-    def pick_unity_rgb_dir(self):
-        p = filedialog.askdirectory(title='Select Unity RGB folder')
+    def pick_unity_dir(self):
+        p = filedialog.askdirectory(title='Select Unity export root folder (with RGB/ and MASK/)')
         if p:
-            self.unity_rgb_dir_var.set(p)
-
-    def pick_unity_mask_dir(self):
-        p = filedialog.askdirectory(title='Select Unity red-mask folder')
-        if p:
-            self.unity_mask_dir_var.set(p)
+            self.unity_dir_var.set(p)
 
     def pick_synth_multi_bg_dir(self):
         p = filedialog.askdirectory(title='Select background images folder for multi-instance synth')
@@ -1212,13 +1204,12 @@ class App(tk.Tk):
     def import_unity_red_masks(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
             return
-        if not self.unity_rgb_dir_var.get().strip() or not self.unity_mask_dir_var.get().strip():
-            self.log_line('Please select both Unity RGB and Unity RED mask folders first.')
+        if not self.unity_dir_var.get().strip():
+            self.log_line('Please select Unity export root folder first (contains RGB/ and MASK/).')
             return
         cmd = [
             str(PY), 'scripts/import_unity_red_masks.py',
-            '--rgb-dir', self.unity_rgb_dir_var.get().strip(),
-            '--mask-dir', self.unity_mask_dir_var.get().strip(),
+            '--unity-dir', self.unity_dir_var.get().strip(),
             '--class-name', self.class_var.get(),
             '--class-id', self.class_id_var.get(),
             '--red-threshold', self.unity_red_thr_var.get(),

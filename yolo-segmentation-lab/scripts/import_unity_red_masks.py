@@ -33,7 +33,6 @@ def load_red_mask(mask_path: Path, threshold: int):
     m = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
     if m is None:
         return None
-    # Unity mask format: red object on black background (BGR in OpenCV)
     red = m[:, :, 2]
     green = m[:, :, 1]
     blue = m[:, :, 0]
@@ -43,10 +42,61 @@ def load_red_mask(mask_path: Path, threshold: int):
     return bin_mask
 
 
+def _stem_norm(p: Path):
+    s = p.stem.lower()
+    for suf in ['_mask', '-mask', ' mask', '_rgb', '-rgb', ' rgb', '_color', '-color', ' color']:
+        if s.endswith(suf):
+            s = s[: -len(suf)]
+    return s
+
+
+def find_rgb_mask_dirs(unity_dir: Path):
+    candidates = [d for d in unity_dir.iterdir() if d.is_dir()]
+    rgb_dir = None
+    mask_dir = None
+    for d in candidates:
+        n = d.name.lower()
+        if rgb_dir is None and n in {'rgb', 'images', 'image', 'color', 'render', 'renders'}:
+            rgb_dir = d
+        if mask_dir is None and n in {'mask', 'masks', 'seg', 'segmentation'}:
+            mask_dir = d
+    if rgb_dir is None or mask_dir is None:
+        raise RuntimeError('Could not auto-find RGB/MASK folders inside unity-dir. Expected e.g. RGB/ and MASK/.')
+    return rgb_dir, mask_dir
+
+
+def build_mask_index(mask_dir: Path):
+    idx = {}
+    for p in sorted(mask_dir.rglob('*')):
+        if p.suffix.lower() not in IMG_EXTS:
+            continue
+        rel = p.relative_to(mask_dir)
+        key_rel = rel.with_suffix('').as_posix().lower()
+        idx[key_rel] = p
+        idx[_stem_norm(rel)] = p
+        idx[_stem_norm(Path(rel.name))] = p
+    return idx
+
+
+def find_mask_for_rgb(rgb_path: Path, rgb_dir: Path, mask_idx: dict):
+    rel = rgb_path.relative_to(rgb_dir)
+    k1 = rel.with_suffix('').as_posix().lower()
+    if k1 in mask_idx:
+        return mask_idx[k1]
+    k2 = _stem_norm(rel)
+    if k2 in mask_idx:
+        return mask_idx[k2]
+    k3 = _stem_norm(Path(rel.name))
+    if k3 in mask_idx:
+        return mask_idx[k3]
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description='Import Unity RGB + red mask pairs into YOLO-seg dataset format.')
-    ap.add_argument('--rgb-dir', required=True)
-    ap.add_argument('--mask-dir', required=True)
+    ap.add_argument('--unity-dir', default='')
+    ap.add_argument('--rgb-dir', default='')
+    ap.add_argument('--mask-dir', default='')
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
     ap.add_argument('--data-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
@@ -54,10 +104,17 @@ def main():
     ap.add_argument('--red-threshold', type=int, default=120)
     args = ap.parse_args()
 
-    rgb_dir = Path(args.rgb_dir)
-    mask_dir = Path(args.mask_dir)
+    if args.unity_dir.strip():
+        unity_dir = Path(args.unity_dir)
+        if not unity_dir.exists():
+            raise RuntimeError('unity-dir does not exist')
+        rgb_dir, mask_dir = find_rgb_mask_dirs(unity_dir)
+    else:
+        rgb_dir = Path(args.rgb_dir)
+        mask_dir = Path(args.mask_dir)
+
     if not rgb_dir.exists() or not mask_dir.exists():
-        raise RuntimeError('rgb-dir and mask-dir must both exist')
+        raise RuntimeError('RGB and MASK folders must exist')
 
     run_name = args.run_name.strip() or datetime.now().strftime('unity_%Y%m%d_%H%M%S')
     root = Path(args.data_root)
@@ -72,13 +129,14 @@ def main():
     if not rgb_files:
         raise RuntimeError('No RGB images found')
 
+    mask_idx = build_mask_index(mask_dir)
+
     made = 0
+    missed = 0
     for i, rgb_path in enumerate(rgb_files, start=1):
-        rel = rgb_path.relative_to(rgb_dir)
-        mask_path = (mask_dir / rel).with_suffix('.png')
-        if not mask_path.exists():
-            mask_path = (mask_dir / rel).with_suffix(rgb_path.suffix)
-        if not mask_path.exists():
+        mask_path = find_mask_for_rgb(rgb_path, rgb_dir, mask_idx)
+        if mask_path is None:
+            missed += 1
             continue
 
         rgb = cv2.imread(str(rgb_path), cv2.IMREAD_COLOR)
@@ -108,7 +166,10 @@ def main():
         made += 1
 
     print(f'Imported Unity samples: {made}')
+    print(f'Missing mask matches: {missed}')
     print(f'Run name: {run_name}')
+    print(f'RGB dir: {rgb_dir}')
+    print(f'Mask dir: {mask_dir}')
     print(f'Images dir: {out_img_dir}')
     print(f'Labels dir: {out_lbl_dir}')
     print(f'Overlays dir: {out_viz_dir}')
