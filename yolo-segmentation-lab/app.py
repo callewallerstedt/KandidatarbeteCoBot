@@ -1068,7 +1068,8 @@ class App(tk.Tk):
         ttk.Label(frm, text='Pose train ratio').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.hc_pose_train_ratio_var, width=10).grid(row=2, column=1, sticky='w')
 
-        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=3, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=3, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=3, column=1, pady=8, sticky='w')
 
         ttk.Separator(frm, orient='horizontal').grid(row=4, column=0, columnspan=3, sticky='we', pady=8)
 
@@ -1271,6 +1272,13 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title='Select Unity export root (RGB/MASK/annotations)')
         if p:
             self.hc_unity_dir_var.set(p)
+
+    def headcam_validate_unity_bundle(self):
+        unity_dir = self.hc_unity_dir_var.get().strip()
+        if not unity_dir:
+            self.log_line('HeadCam: select Unity export folder first.')
+            return
+        self.run_cmd([str(PY), 'scripts/validate_unity_bundle.py', '--unity-dir', unity_dir])
 
     def headcam_import_unity_bundle(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):

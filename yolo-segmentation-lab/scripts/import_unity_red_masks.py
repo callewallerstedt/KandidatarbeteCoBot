@@ -56,14 +56,25 @@ def find_rgb_mask_dirs(unity_dir: Path):
     mask_dir = None
     for d in candidates:
         n = d.name.lower()
-        if rgb_dir is None and n in {'rgb', 'images', 'image', 'color', 'render', 'renders'}:
+        if rgb_dir is None and n in {'rgb', 'images', 'image', 'color', 'render', 'renders', 'camera', 'frames'}:
             rgb_dir = d
-        if mask_dir is None and n in {'mask', 'masks', 'seg', 'segmentation'}:
+        if mask_dir is None and n in {'mask', 'masks', 'seg', 'segmentation', 'label', 'labels', 'redmask', 'red_masks'}:
             mask_dir = d
+    if rgb_dir is None:
+        for d in candidates:
+            if any(p.suffix.lower() in IMG_EXTS for p in d.glob('*')):
+                rgb_dir = d
+                break
+    if mask_dir is None:
+        for d in candidates:
+            if d == rgb_dir:
+                continue
+            if any(p.suffix.lower() in IMG_EXTS for p in d.glob('*')):
+                mask_dir = d
+                break
     if rgb_dir is None or mask_dir is None:
-        raise RuntimeError('Could not auto-find RGB/MASK folders inside unity-dir. Expected e.g. RGB/ and MASK/.')
+        raise RuntimeError('Could not auto-find RGB/MASK folders inside unity-dir. Expected two image folders (RGB and red-mask).')
     return rgb_dir, mask_dir
-
 
 def build_mask_index(mask_dir: Path):
     idx = {}

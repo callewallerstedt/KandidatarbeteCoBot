@@ -22,11 +22,24 @@ def main():
     args = ap.parse_args()
 
     u = Path(args.unity_dir)
-    rgb_dir = u / 'RGB'
-    ann_dir = u / 'annotations'
-    if not rgb_dir.exists() or not ann_dir.exists():
-        raise RuntimeError('unity-dir must contain RGB/ and annotations/')
-
+    rgb_dir = None
+    ann_dir = None
+    for d in u.iterdir():
+        if not d.is_dir():
+            continue
+        n = d.name.lower()
+        if rgb_dir is None and n in {'rgb', 'images', 'image', 'color', 'render', 'renders', 'camera', 'frames'}:
+            rgb_dir = d
+        if ann_dir is None and n in {'annotations', 'annotation', 'ann', 'json'}:
+            ann_dir = d
+    if rgb_dir is None:
+        c = u / 'RGB'
+        if c.exists(): rgb_dir = c
+    if ann_dir is None:
+        c = u / 'annotations'
+        if c.exists(): ann_dir = c
+    if not rgb_dir or not ann_dir or not rgb_dir.exists() or not ann_dir.exists():
+        raise RuntimeError('unity-dir must contain an RGB-like image folder and an annotations JSON folder')
     frames = []
     for jp in sorted(ann_dir.glob('*.json')):
         d = json.loads(jp.read_text(encoding='utf-8'))
@@ -68,18 +81,21 @@ def main():
 
             lines = []
             for o in d.get('objects', []):
-                c = int(o.get('class_id', 0))
-                if 'bbox_xyxy' not in o or len(o['bbox_xyxy']) != 4:
+                c = int(o.get('class_id', o.get('class', 0)))
+                bbox = o.get('bbox_xyxy') or o.get('bbox') or o.get('xyxy')
+                if bbox is None and all(k in o for k in ['x1', 'y1', 'x2', 'y2']):
+                    bbox = [o['x1'], o['y1'], o['x2'], o['y2']]
+                if bbox is None or len(bbox) != 4:
                     continue
-                x1, y1, x2, y2 = o['bbox_xyxy']
+                x1, y1, x2, y2 = bbox
                 cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
                 bw, bh = (x2 - x1), (y2 - y1)
                 if bw <= 1 or bh <= 1:
                     continue
 
-                k1 = o.get('center', [cx, cy, 2])
-                k2 = o.get('grip_a', [x1, cy, 2])
-                k3 = o.get('grip_b', [x2, cy, 2])
+                k1 = o.get('center', o.get('kp_center', [cx, cy, 2]))
+                k2 = o.get('grip_a', o.get('gripA', o.get('kp_a', [x1, cy, 2])))
+                k3 = o.get('grip_b', o.get('gripB', o.get('kp_b', [x2, cy, 2])))
                 if len(k1) < 3 or len(k2) < 3 or len(k3) < 3:
                     continue
 
