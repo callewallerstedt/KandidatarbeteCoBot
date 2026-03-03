@@ -58,6 +58,14 @@ def main():
     if not frames:
         raise RuntimeError('No valid frame annotations found.')
 
+    # Build contiguous class-id map for YOLO (0..N-1)
+    for _img, d in frames:
+        for o in d.get('objects', []):
+            raw_class_ids.add(int(o.get('class_id', o.get('class', 0))))
+    if not raw_class_ids:
+        raw_class_ids = {0}
+    class_map = {cid: i for i, cid in enumerate(sorted(raw_class_ids))}
+
     random.seed(args.seed)
     random.shuffle(frames)
     n_train = int(len(frames) * args.train_ratio)
@@ -70,7 +78,8 @@ def main():
     if out.exists():
         shutil.rmtree(out)
 
-    seen_class_ids = set()
+    # YOLO expects contiguous class ids starting at 0 in dataset yaml.
+    raw_class_ids = set()
 
     for split, items in splits.items():
         (out / 'images' / split).mkdir(parents=True, exist_ok=True)
@@ -88,7 +97,7 @@ def main():
             lines = []
             for o in d.get('objects', []):
                 c = int(o.get('class_id', o.get('class', 0)))
-                seen_class_ids.add(c)
+                raw_class_ids.add(c)
                 bbox = o.get('bbox_xyxy') or o.get('bbox') or o.get('xyxy')
                 if bbox is None and all(k in o for k in ['x1', 'y1', 'x2', 'y2']):
                     bbox = [o['x1'], o['y1'], o['x2'], o['y2']]
@@ -107,7 +116,7 @@ def main():
                     continue
 
                 vals = [
-                    c,
+                    class_map[c],
                     norm(cx, w), norm(cy, h), norm(bw, w), norm(bh, h),
                     norm(k1[0], w), norm(k1[1], h), int(k1[2]),
                     norm(k2[0], w), norm(k2[1], h), int(k2[2]),
@@ -117,16 +126,11 @@ def main():
 
             (out / 'labels' / split / f'{stem}.txt').write_text('\n'.join(lines) + ('\n' if lines else ''), encoding='utf-8')
 
-    if not seen_class_ids:
-        seen_class_ids = {0}
-    min_id = min(seen_class_ids)
-    if min_id < 0:
-        raise RuntimeError('Negative class ids are not supported in YOLO pose labels.')
-
     names_lines = []
-    for cid in sorted(seen_class_ids):
-        cname = args.class_name if cid == sorted(seen_class_ids)[0] else f'class_{cid}'
-        names_lines.append(f'  {cid}: {cname}')
+    for raw_cid in sorted(raw_class_ids):
+        mapped = class_map[raw_cid]
+        cname = args.class_name if mapped == 0 else f'class_{raw_cid}'
+        names_lines.append(f'  {mapped}: {cname}')
 
     (out / 'dataset.yaml').write_text(
         f"""path: {out.as_posix()}\ntrain: images/train\nval: images/val\nkpt_shape: [3, 3]\nflip_idx: [0, 2, 1]\nnames:\n""" + "\n".join(names_lines) + "\n",
