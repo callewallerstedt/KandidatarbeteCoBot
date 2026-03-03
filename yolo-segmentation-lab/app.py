@@ -1110,7 +1110,8 @@ class App(tk.Tk):
         ttk.Button(frm, text='Unity capture 1', command=self.headcam_unity_capture_one).grid(row=4, column=0, pady=6, sticky='w')
         ttk.Button(frm, text='Unity capture N', command=self.headcam_unity_capture_n).grid(row=4, column=1, pady=6, sticky='w')
         ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=4, column=2, pady=6, sticky='w')
-        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=5, column=0, pady=6, sticky='w')
+        ttk.Button(frm, text='Quick preview latest capture (mask+keypoints)', command=self.headcam_preview_latest_capture).grid(row=5, column=0, pady=6, sticky='w')
+        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=5, column=1, pady=6, sticky='w')
 
         ttk.Separator(frm, orient='horizontal').grid(row=6, column=0, columnspan=3, sticky='we', pady=8)
 
@@ -1356,6 +1357,17 @@ class App(tk.Tk):
             self.log_line('HeadCam: select Unity export folder first.')
             return
         self.run_cmd([str(PY), 'scripts/validate_unity_bundle.py', '--unity-dir', unity_dir])
+
+    def headcam_preview_latest_capture(self):
+        unity_dir = self.hc_unity_dir_var.get().strip()
+        if not unity_dir:
+            self.log_line('HeadCam: select Unity export folder first.')
+            return
+        self.run_cmd([
+            str(PY), 'scripts/preview_unity_capture_alignment.py',
+            '--unity-dir', unity_dir,
+            '--camera-tag', (self.hc_capture_profile_var.get().strip() if self.hc_capture_profile_var.get().strip() != 'all' else 'cobot'),
+        ])
 
     def headcam_import_unity_bundle(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
