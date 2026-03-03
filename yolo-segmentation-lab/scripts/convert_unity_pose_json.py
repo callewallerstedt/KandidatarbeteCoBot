@@ -70,6 +70,8 @@ def main():
     if out.exists():
         shutil.rmtree(out)
 
+    seen_class_ids = set()
+
     for split, items in splits.items():
         (out / 'images' / split).mkdir(parents=True, exist_ok=True)
         (out / 'labels' / split).mkdir(parents=True, exist_ok=True)
@@ -86,6 +88,7 @@ def main():
             lines = []
             for o in d.get('objects', []):
                 c = int(o.get('class_id', o.get('class', 0)))
+                seen_class_ids.add(c)
                 bbox = o.get('bbox_xyxy') or o.get('bbox') or o.get('xyxy')
                 if bbox is None and all(k in o for k in ['x1', 'y1', 'x2', 'y2']):
                     bbox = [o['x1'], o['y1'], o['x2'], o['y2']]
@@ -114,8 +117,19 @@ def main():
 
             (out / 'labels' / split / f'{stem}.txt').write_text('\n'.join(lines) + ('\n' if lines else ''), encoding='utf-8')
 
+    if not seen_class_ids:
+        seen_class_ids = {0}
+    min_id = min(seen_class_ids)
+    if min_id < 0:
+        raise RuntimeError('Negative class ids are not supported in YOLO pose labels.')
+
+    names_lines = []
+    for cid in sorted(seen_class_ids):
+        cname = args.class_name if cid == sorted(seen_class_ids)[0] else f'class_{cid}'
+        names_lines.append(f'  {cid}: {cname}')
+
     (out / 'dataset.yaml').write_text(
-        f"""path: {out.as_posix()}\ntrain: images/train\nval: images/val\nkpt_shape: [3, 3]\nflip_idx: [0, 2, 1]\nnames:\n  0: {args.class_name}\n""",
+        f"""path: {out.as_posix()}\ntrain: images/train\nval: images/val\nkpt_shape: [3, 3]\nflip_idx: [0, 2, 1]\nnames:\n""" + "\n".join(names_lines) + "\n",
         encoding='utf-8',
     )
 

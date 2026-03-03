@@ -1102,8 +1102,10 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=11, column=1, sticky='w')
         ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=11, column=1, padx=(70,0), sticky='w')
 
-        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=12, column=0, pady=10, sticky='w')
-        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=13, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Train SEG only', command=self.headcam_train_seg_only).grid(row=12, column=0, pady=10, sticky='w')
+        ttk.Button(frm, text='Train POSE only', command=self.headcam_train_pose_only).grid(row=12, column=1, pady=10, sticky='w')
+        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=12, column=2, pady=10, sticky='w')
+        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train SEG first. Then train POSE or run chain.').grid(row=13, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -1352,11 +1354,9 @@ class App(tk.Tk):
         ]
         self.run_cmd_chain([cmd_seg, cmd_pose])
 
-    def headcam_train_chain(self):
+    def _headcam_seg_cmd(self):
         run = self.hc_run_var.get().strip() or 'headcam01'
-        pose_yaml = ROOT / 'data_pose' / run / 'dataset.yaml'
-
-        cmd_seg = [
+        return [
             str(PY), 'scripts/train_yolo_seg.py',
             '--model', self.hc_seg_model_var.get(),
             '--epochs', self.hc_seg_epochs_var.get(),
@@ -1366,7 +1366,11 @@ class App(tk.Tk):
             '--workers', self.hc_workers_var.get(),
             '--name', f'headcam_seg_{run}',
         ]
-        cmd_pose = [
+
+    def _headcam_pose_cmd(self):
+        run = self.hc_run_var.get().strip() or 'headcam01'
+        pose_yaml = ROOT / 'data_pose' / run / 'dataset.yaml'
+        return [
             str(PY), 'scripts/train_yolo_pose.py',
             '--model', self.hc_pose_model_var.get(),
             '--data', str(pose_yaml),
@@ -1377,7 +1381,15 @@ class App(tk.Tk):
             '--workers', self.hc_workers_var.get(),
             '--name', f'headcam_pose_{run}',
         ]
-        self.run_cmd_chain([cmd_seg, cmd_pose])
+
+    def headcam_train_seg_only(self):
+        self.run_cmd(self._headcam_seg_cmd())
+
+    def headcam_train_pose_only(self):
+        self.run_cmd(self._headcam_pose_cmd())
+
+    def headcam_train_chain(self):
+        self.run_cmd_chain([self._headcam_seg_cmd(), self._headcam_pose_cmd()])
 
     def autolabel(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
