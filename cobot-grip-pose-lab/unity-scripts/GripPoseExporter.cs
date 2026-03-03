@@ -12,6 +12,7 @@ public class GripPoseExporter : MonoBehaviour
     public string maskLayerName = "SegmentationMask";
     public Shader maskShader;
     public bool forceMaskReplacementShader = true;
+    public bool forceFlatRedMaterialOverride = true;
 
     public string outputRoot = "unity_export";
     public string cameraTag = "cobot"; // cobot, roof1, roof2 ...
@@ -158,6 +159,22 @@ public class GripPoseExporter : MonoBehaviour
         Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} missingKp={missingKp} behindCam={behindCam} badBox={badBox} rgb={rgbPath} mask={maskPath} ann={jsonPath} mode=" + (maskCamera != null ? "dual-camera" : "single-camera"));
     }
 
+    private Shader FindAnyUnlitShader()
+    {
+        string[] candidates = {
+            "Unlit/Color",
+            "Universal Render Pipeline/Unlit",
+            "HDRP/Unlit",
+            "Sprites/Default"
+        };
+        foreach (var s in candidates)
+        {
+            var sh = Shader.Find(s);
+            if (sh != null) return sh;
+        }
+        return null;
+    }
+
     private void SaveMaskFromRenderCamera(string outPath)
     {
         if (renderCamera == null) return;
@@ -175,15 +192,58 @@ public class GripPoseExporter : MonoBehaviour
         tempCam.allowHDR = false;
         tempCam.allowMSAA = false;
 
-        if (maskShader == null)
-            maskShader = Shader.Find("Hidden/ObjectMaskRed");
+        bool usedMaterialOverride = false;
+        List<Renderer> layerRenderers = null;
+        List<Material[]> oldMats = null;
+        Material redMat = null;
 
-        if (maskShader != null)
-            tempCam.SetReplacementShader(maskShader, "");
+        if (forceFlatRedMaterialOverride)
+        {
+            layerRenderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None)
+                .Where(r => r != null && r.gameObject.layer == layer)
+                .ToList();
+            oldMats = new List<Material[]>();
+
+            var unlit = FindAnyUnlitShader();
+            if (unlit != null)
+            {
+                redMat = new Material(unlit);
+                if (redMat.HasProperty("_BaseColor")) redMat.SetColor("_BaseColor", Color.red);
+                if (redMat.HasProperty("_Color")) redMat.SetColor("_Color", Color.red);
+
+                foreach (var r in layerRenderers)
+                {
+                    var old = r.sharedMaterials;
+                    oldMats.Add(old);
+                    var rep = new Material[old.Length];
+                    for (int i = 0; i < rep.Length; i++) rep[i] = redMat;
+                    r.sharedMaterials = rep;
+                }
+                usedMaterialOverride = true;
+            }
+        }
+
+        if (!usedMaterialOverride)
+        {
+            if (maskShader == null)
+                maskShader = Shader.Find("Hidden/ObjectMaskRed");
+            if (maskShader != null)
+                tempCam.SetReplacementShader(maskShader, "");
+        }
 
         SaveCameraPng(tempCam, outPath);
 
-        tempCam.ResetReplacementShader();
+        if (!usedMaterialOverride)
+        {
+            tempCam.ResetReplacementShader();
+        }
+        else if (layerRenderers != null && oldMats != null)
+        {
+            for (int i = 0; i < layerRenderers.Count && i < oldMats.Count; i++)
+                layerRenderers[i].sharedMaterials = oldMats[i];
+            if (redMat != null) Destroy(redMat);
+        }
+
         Destroy(go);
     }
 
