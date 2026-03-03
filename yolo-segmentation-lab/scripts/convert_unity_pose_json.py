@@ -59,6 +59,7 @@ def main():
         raise RuntimeError('No valid frame annotations found.')
 
     # Build contiguous class-id map for YOLO (0..N-1)
+    raw_class_ids = set()
     for _img, d in frames:
         for o in d.get('objects', []):
             raw_class_ids.add(int(o.get('class_id', o.get('class', 0))))
@@ -77,9 +78,6 @@ def main():
     out = Path(args.out_dir)
     if out.exists():
         shutil.rmtree(out)
-
-    # YOLO expects contiguous class ids starting at 0 in dataset yaml.
-    raw_class_ids = set()
 
     for split, items in splits.items():
         (out / 'images' / split).mkdir(parents=True, exist_ok=True)
