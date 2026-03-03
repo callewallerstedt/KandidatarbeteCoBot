@@ -122,9 +122,9 @@ public class GripPoseExporter : MonoBehaviour
                 continue;
             }
 
-            Vector3 c = renderCamera.WorldToScreenPoint(obj.centerPoint.position);
-            Vector3 a = renderCamera.WorldToScreenPoint(obj.gripPointA.position);
-            Vector3 b = renderCamera.WorldToScreenPoint(obj.gripPointB.position);
+            Vector3 c = renderCamera.WorldToViewportPoint(obj.centerPoint.position);
+            Vector3 a = renderCamera.WorldToViewportPoint(obj.gripPointA.position);
+            Vector3 b = renderCamera.WorldToViewportPoint(obj.gripPointB.position);
 
             // Skip if keypoints behind camera
             if (c.z <= 0f || a.z <= 0f || b.z <= 0f)
@@ -139,18 +139,21 @@ public class GripPoseExporter : MonoBehaviour
                 continue;
             }
 
-            // Unity screen origin is bottom-left; convert to image top-left convention
-            float cY = height - c.y;
-            float aY = height - a.y;
-            float bY = height - b.y;
+            // Viewport -> image pixel coordinates (top-left origin for exported labels)
+            float cx = Mathf.Clamp(c.x * width, 0, width - 1);
+            float cy = Mathf.Clamp((1f - c.y) * height, 0, height - 1);
+            float ax = Mathf.Clamp(a.x * width, 0, width - 1);
+            float ay = Mathf.Clamp((1f - a.y) * height, 0, height - 1);
+            float bx = Mathf.Clamp(b.x * width, 0, width - 1);
+            float by = Mathf.Clamp((1f - b.y) * height, 0, height - 1);
 
             ann.objects.Add(new ObjAnn
             {
                 class_id = obj.classId,
                 bbox_xyxy = new[] { x1, y1, x2, y2 },
-                center = new[] { c.x, cY, 2f },
-                grip_a = new[] { a.x, aY, 2f },
-                grip_b = new[] { b.x, bY, 2f },
+                center = new[] { cx, cy, 2f },
+                grip_a = new[] { ax, ay, 2f },
+                grip_b = new[] { bx, by, 2f },
             });
         }
 
@@ -288,14 +291,15 @@ public class GripPoseExporter : MonoBehaviour
         bool anyFront = false;
         foreach (var p in pts)
         {
-            Vector3 sp = renderCamera.WorldToScreenPoint(p);
+            Vector3 sp = renderCamera.WorldToViewportPoint(p);
             if (sp.z <= 0f) continue;
             anyFront = true;
-            x1 = Mathf.Min(x1, sp.x);
-            x2 = Mathf.Max(x2, sp.x);
-            float yy = height - sp.y;
-            y1 = Mathf.Min(y1, yy);
-            y2 = Mathf.Max(y2, yy);
+            float px = sp.x * width;
+            float py = (1f - sp.y) * height;
+            x1 = Mathf.Min(x1, px);
+            x2 = Mathf.Max(x2, px);
+            y1 = Mathf.Min(y1, py);
+            y2 = Mathf.Max(y2, py);
         }
 
         if (!anyFront) return false;
