@@ -57,22 +57,23 @@ public class GripPoseExporter : MonoBehaviour
 
     private void ConfigureMaskCameraIfNeeded()
     {
-        if (maskCamera == null || !forceMaskReplacementShader) return;
+        Camera cam = maskCamera != null ? maskCamera : renderCamera;
+        if (cam == null || !forceMaskReplacementShader) return;
 
         int layer = LayerMask.NameToLayer(maskLayerName);
         if (layer >= 0)
-            maskCamera.cullingMask = 1 << layer;
+            cam.cullingMask = 1 << layer;
 
-        maskCamera.clearFlags = CameraClearFlags.SolidColor;
-        maskCamera.backgroundColor = Color.black;
-        maskCamera.allowHDR = false;
-        maskCamera.allowMSAA = false;
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = Color.black;
+        cam.allowHDR = false;
+        cam.allowMSAA = false;
 
         if (maskShader == null)
             maskShader = Shader.Find("Hidden/ObjectMaskRed");
 
         if (maskShader != null)
-            maskCamera.SetReplacementShader(maskShader, "");
+            cam.SetReplacementShader(maskShader, "");
         else
             Debug.LogWarning("[GripPoseExporter] maskShader missing. Assign ObjectMaskRed shader.");
     }
@@ -87,15 +88,24 @@ public class GripPoseExporter : MonoBehaviour
 
         EnsureDirs();
         EnsureObjectList();
-        ConfigureMaskCameraIfNeeded();
 
         string imageName = $"frame_{frameIndex:D6}.png";
         string rgbPath = Path.Combine(outputRoot, "RGB", cameraTag, imageName);
         string maskPath = Path.Combine(outputRoot, "MASK", cameraTag, imageName);
 
+        // 1) Always save normal RGB first
         SaveCameraPng(renderCamera, rgbPath);
+
+        // 2) Save mask either from dedicated mask camera or by temporarily switching render camera
         if (maskCamera != null)
+        {
+            ConfigureMaskCameraIfNeeded();
             SaveCameraPng(maskCamera, maskPath);
+        }
+        else
+        {
+            SaveMaskFromRenderCamera(maskPath);
+        }
 
         FrameAnn ann = new FrameAnn { image = imageName, width = width, height = height };
 
@@ -145,7 +155,42 @@ public class GripPoseExporter : MonoBehaviour
 
         string jsonPath = Path.Combine(outputRoot, "annotations", cameraTag, $"frame_{frameIndex:D6}.json");
         File.WriteAllText(jsonPath, JsonUtility.ToJson(ann, true));
-        Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} missingKp={missingKp} behindCam={behindCam} badBox={badBox} rgb={rgbPath}" + (maskCamera != null ? $" mask={maskPath}" : " (no maskCamera set)") + $" ann={jsonPath}");
+        Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} missingKp={missingKp} behindCam={behindCam} badBox={badBox} rgb={rgbPath} mask={maskPath} ann={jsonPath} mode=" + (maskCamera != null ? "dual-camera" : "single-camera"));
+    }
+
+    private void SaveMaskFromRenderCamera(string outPath)
+    {
+        if (renderCamera == null) return;
+
+        var oldClear = renderCamera.clearFlags;
+        var oldBg = renderCamera.backgroundColor;
+        var oldHdr = renderCamera.allowHDR;
+        var oldMsaa = renderCamera.allowMSAA;
+        var oldMask = renderCamera.cullingMask;
+
+        int layer = LayerMask.NameToLayer(maskLayerName);
+        if (layer >= 0)
+            renderCamera.cullingMask = 1 << layer;
+
+        renderCamera.clearFlags = CameraClearFlags.SolidColor;
+        renderCamera.backgroundColor = Color.black;
+        renderCamera.allowHDR = false;
+        renderCamera.allowMSAA = false;
+
+        if (maskShader == null)
+            maskShader = Shader.Find("Hidden/ObjectMaskRed");
+
+        if (maskShader != null)
+            renderCamera.SetReplacementShader(maskShader, "");
+
+        SaveCameraPng(renderCamera, outPath);
+
+        renderCamera.ResetReplacementShader();
+        renderCamera.clearFlags = oldClear;
+        renderCamera.backgroundColor = oldBg;
+        renderCamera.allowHDR = oldHdr;
+        renderCamera.allowMSAA = oldMsaa;
+        renderCamera.cullingMask = oldMask;
     }
 
     private void SaveCameraPng(Camera cam, string outPath)
