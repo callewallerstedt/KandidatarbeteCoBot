@@ -27,12 +27,16 @@ def main():
     ap.add_argument('--human-model', default='yolo11n-pose.pt', help='Pose model for human joint tracking')
     ap.add_argument('--human-conf', type=float, default=0.20)
     ap.add_argument('--human-alpha', type=float, default=0.30, help='Opacity for thick arm corridor')
+    ap.add_argument('--grip-pose', action='store_true', help='Enable grip keypoint overlay from a pose model')
+    ap.add_argument('--grip-model', default='', help='Pose model weights for grip keypoints (best.pt)')
+    ap.add_argument('--grip-conf', type=float, default=0.20)
     ap.add_argument('--mask-smooth', type=int, default=2, help='Mask smoothing strength (0=off, higher=smoother)')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
     model = YOLO(args.weights)
     pose_model = YOLO(args.human_model) if args.human_joints else None
+    grip_model = YOLO(args.grip_model) if (args.grip_pose and args.grip_model.strip()) else None
 
     win = 'YOLO-Seg Overlay (q to quit)'
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -117,6 +121,26 @@ def main():
         if count == 0 and r.boxes is not None and len(r.boxes) > 0:
             cv2.putText(frame, 'Warning: boxes detected but no seg masks', (12, 62), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2, cv2.LINE_AA)
         return frame, count
+
+    def draw_grip_overlay(frame, grip_r):
+        if grip_r is None or grip_r.keypoints is None:
+            return frame
+        out = frame.copy()
+        kpts = grip_r.keypoints.xy
+        if kpts is None:
+            return frame
+        kpts = kpts.cpu().numpy()
+        for person in kpts:
+            if len(person) < 3:
+                continue
+            c = tuple(np.round(person[0]).astype(int))
+            a = tuple(np.round(person[1]).astype(int))
+            b = tuple(np.round(person[2]).astype(int))
+            cv2.line(out, a, b, (0, 255, 255), 3, cv2.LINE_AA)
+            cv2.circle(out, c, 5, (255, 255, 255), -1, cv2.LINE_AA)
+            cv2.circle(out, a, 6, (0, 255, 0), -1, cv2.LINE_AA)
+            cv2.circle(out, b, 6, (0, 0, 255), -1, cv2.LINE_AA)
+        return out
 
     def draw_human_arm_overlay(frame, pose_r):
         if pose_r is None or pose_r.keypoints is None:
@@ -239,6 +263,9 @@ def main():
             if pose_model is not None:
                 pr = pose_model.predict(raw, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
                 frame = draw_human_arm_overlay(frame, pr)
+            if grip_model is not None:
+                gr = grip_model.predict(raw, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
+                frame = draw_grip_overlay(frame, gr)
             if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
                 print(f'frame {frame_idx}: count={count}')
             if show_and_maybe_save(frame):
@@ -251,6 +278,9 @@ def main():
             if pose_model is not None and getattr(r, 'orig_img', None) is not None:
                 pr = pose_model.predict(r.orig_img, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
                 frame = draw_human_arm_overlay(frame, pr)
+            if grip_model is not None and getattr(r, 'orig_img', None) is not None:
+                gr = grip_model.predict(r.orig_img, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
+                frame = draw_grip_overlay(frame, gr)
             if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
                 print(f'frame {frame_idx}: count={count}')
             if show_and_maybe_save(frame):

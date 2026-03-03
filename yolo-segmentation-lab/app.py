@@ -1002,6 +1002,9 @@ class App(tk.Tk):
         self.human_conf_var = tk.StringVar(value='0.20')
         self.human_alpha_var = tk.StringVar(value='0.30')
         self.mask_smooth_var = tk.StringVar(value='2')
+        self.grip_pose_var = tk.BooleanVar(value=False)
+        self.grip_model_var = tk.StringVar(value=str(ROOT / 'runs' / 'pose' / 'headcam_pose_headcam2' / 'weights' / 'best.pt'))
+        self.grip_conf_var = tk.StringVar(value='0.20')
         self.unity_tcp_var = tk.BooleanVar(value=False)
         self.unity_tcp_port_var = tk.StringVar(value='5000')
 
@@ -1054,11 +1057,15 @@ class App(tk.Tk):
         ttk.Label(frm, text='Mask smooth (0 off)').grid(row=13, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.mask_smooth_var, width=8).grid(row=13, column=1, sticky='w')
 
-        ttk.Checkbutton(frm, text='Use Unity TCP source', variable=self.unity_tcp_var).grid(row=14, column=0, sticky='w')
-        ttk.Label(frm, text='TCP port').grid(row=14, column=1, sticky='e')
-        ttk.Entry(frm, textvariable=self.unity_tcp_port_var, width=8).grid(row=14, column=2, sticky='w')
+        ttk.Checkbutton(frm, text='Enable grip keypoint overlay', variable=self.grip_pose_var).grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.grip_model_var, width=55).grid(row=14, column=1, sticky='we')
+        ttk.Entry(frm, textvariable=self.grip_conf_var, width=8).grid(row=14, column=2, sticky='w')
 
-        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=15, column=0, pady=8)
+        ttk.Checkbutton(frm, text='Use Unity TCP source', variable=self.unity_tcp_var).grid(row=15, column=0, sticky='w')
+        ttk.Label(frm, text='TCP port').grid(row=15, column=1, sticky='e')
+        ttk.Entry(frm, textvariable=self.unity_tcp_port_var, width=8).grid(row=15, column=2, sticky='w')
+
+        ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=16, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
     def build_headcam_tab(self):
@@ -1908,6 +1915,8 @@ class App(tk.Tk):
                 '--device', self.infer_device_var.get(),
                 '--mask-smooth', self.mask_smooth_var.get(),
             ]
+            if self.grip_pose_var.get() and self.grip_model_var.get().strip():
+                cmd.extend(['--grip-pose', '--grip-model', self.grip_model_var.get().strip(), '--grip-conf', self.grip_conf_var.get()])
             self.run_cmd(cmd)
             return
 
@@ -1928,6 +1937,8 @@ class App(tk.Tk):
             '--human-alpha', self.human_alpha_var.get(),
             '--mask-smooth', self.mask_smooth_var.get(),
         ]
+        if self.grip_pose_var.get() and self.grip_model_var.get().strip():
+            cmd.extend(['--grip-pose', '--grip-model', self.grip_model_var.get().strip(), '--grip-conf', self.grip_conf_var.get()])
         if self.count_log_var.get():
             cmd.append('--count-log')
         if self.human_joints_var.get():

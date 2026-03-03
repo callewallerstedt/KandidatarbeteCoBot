@@ -56,9 +56,13 @@ def main():
     ap.add_argument('--conf', type=float, default=0.25)
     ap.add_argument('--device', default='0')
     ap.add_argument('--mask-smooth', type=int, default=2)
+    ap.add_argument('--grip-pose', action='store_true')
+    ap.add_argument('--grip-model', default='')
+    ap.add_argument('--grip-conf', type=float, default=0.20)
     args = ap.parse_args()
 
     model = YOLO(args.weights)
+    grip_model = YOLO(args.grip_model) if (args.grip_pose and args.grip_model.strip()) else None
     palette = [(255,90,90),(90,255,90),(90,170,255),(255,220,90),(255,90,220),(90,255,255)]
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -111,6 +115,19 @@ def main():
                         col = palette[i % len(palette)]
                         pts = poly.astype(np.int32).reshape(-1, 1, 2)
                         cv2.polylines(out, [pts], True, col, 2, cv2.LINE_AA)
+                if grip_model is not None:
+                    gr = grip_model.predict(frame, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
+                    if gr is not None and gr.keypoints is not None and gr.keypoints.xy is not None:
+                        for p in gr.keypoints.xy.cpu().numpy():
+                            if len(p) < 3:
+                                continue
+                            c = tuple(np.round(p[0]).astype(int))
+                            a = tuple(np.round(p[1]).astype(int))
+                            b = tuple(np.round(p[2]).astype(int))
+                            cv2.line(out, a, b, (0, 255, 255), 3, cv2.LINE_AA)
+                            cv2.circle(out, c, 5, (255, 255, 255), -1, cv2.LINE_AA)
+                            cv2.circle(out, a, 6, (0, 255, 0), -1, cv2.LINE_AA)
+                            cv2.circle(out, b, 6, (0, 0, 255), -1, cv2.LINE_AA)
                 cv2.putText(out, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2, cv2.LINE_AA)
                 cv2.imshow(win, out)
                 if (cv2.waitKey(1) & 0xFF) == ord('q'):
