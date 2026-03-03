@@ -72,6 +72,7 @@ class App(tk.Tk):
         self.tab_train = ttk.Frame(notebook)
         self.tab_ddp = ttk.Frame(notebook)
         self.tab_infer = ttk.Frame(notebook)
+        self.tab_headcam = ttk.Frame(notebook)
         notebook.add(self.tab_instructions, text='0) Instructions')
         notebook.add(self.tab_data, text='1) Data Prep')
         notebook.add(self.tab_synth, text='2) Synthetic BG')
@@ -83,6 +84,7 @@ class App(tk.Tk):
         notebook.add(self.tab_train, text='8) Train')
         notebook.add(self.tab_ddp, text='9) DDP Multi-PC')
         notebook.add(self.tab_infer, text='10) Inference')
+        notebook.add(self.tab_headcam, text='11) HeadCam Unity (Seg+Pose)')
 
         self.class_id_choices = [str(i) for i in range(0, 25)]
         self.seg_model_presets = {
@@ -104,6 +106,7 @@ class App(tk.Tk):
         self.build_train_tab()
         self.build_ddp_tab()
         self.build_infer_tab()
+        self.build_headcam_tab()
         self.refresh_class_options()
         self.sync_yaml_from_folders()
         self.auto_assign_class_id(self.class_var, self.class_id_var)
@@ -136,6 +139,29 @@ class App(tk.Tk):
                 self.log_line(line.rstrip())
             rc = p.wait()
             self.log_line(f'[exit {rc}]')
+
+        threading.Thread(target=_target, daemon=True).start()
+
+    def run_cmd_chain(self, cmds, cwd=ROOT):
+        def _target():
+            for cmd in cmds:
+                self.log_line('> ' + ' '.join(map(str, cmd)))
+                p = subprocess.Popen(
+                    cmd,
+                    cwd=str(cwd),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                )
+                for line in p.stdout:
+                    self.log_line(line.rstrip())
+                rc = p.wait()
+                self.log_line(f'[exit {rc}]')
+                if rc != 0:
+                    self.log_line('Chain stopped due to non-zero exit code.')
+                    break
 
         threading.Thread(target=_target, daemon=True).start()
 
@@ -1011,6 +1037,63 @@ class App(tk.Tk):
         ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=14, column=0, pady=8)
         frm.columnconfigure(1, weight=1)
 
+    def build_headcam_tab(self):
+        frm = self.tab_headcam
+        self.hc_unity_dir_var = tk.StringVar()
+        self.hc_run_var = tk.StringVar(value='headcam01')
+        self.hc_red_thr_var = tk.StringVar(value='120')
+        self.hc_pose_train_ratio_var = tk.StringVar(value='0.90')
+
+        self.hc_seg_model_var = tk.StringVar(value='yolo11s-seg.pt')
+        self.hc_seg_epochs_var = tk.StringVar(value='100')
+        self.hc_seg_imgsz_var = tk.StringVar(value='960')
+        self.hc_seg_batch_var = tk.StringVar(value='16')
+
+        self.hc_pose_model_var = tk.StringVar(value='yolo11s-pose.pt')
+        self.hc_pose_epochs_var = tk.StringVar(value='100')
+        self.hc_pose_imgsz_var = tk.StringVar(value='960')
+        self.hc_pose_batch_var = tk.StringVar(value='16')
+        self.hc_device_var = tk.StringVar(value='0')
+        self.hc_workers_var = tk.StringVar(value='0')
+
+        ttk.Label(frm, text='Unity export folder (must contain RGB/ MASK/ annotations/)').grid(row=0, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_unity_dir_var, width=76).grid(row=0, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_headcam_unity_dir).grid(row=0, column=2)
+
+        ttk.Label(frm, text='Run name').grid(row=1, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_run_var, width=20).grid(row=1, column=1, sticky='w')
+        ttk.Label(frm, text='Red threshold').grid(row=1, column=1, padx=(180, 0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_red_thr_var, width=8).grid(row=1, column=2, sticky='w')
+
+        ttk.Label(frm, text='Pose train ratio').grid(row=2, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_train_ratio_var, width=10).grid(row=2, column=1, sticky='w')
+
+        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=3, column=0, pady=8, sticky='w')
+
+        ttk.Separator(frm, orient='horizontal').grid(row=4, column=0, columnspan=3, sticky='we', pady=8)
+
+        ttk.Label(frm, text='SEG model').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_model_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='SEG epochs/imgsz/batch').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_epochs_var, width=8).grid(row=6, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_imgsz_var, width=8).grid(row=6, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_batch_var, width=8).grid(row=6, column=1, padx=(140,0), sticky='w')
+
+        ttk.Label(frm, text='POSE model').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_model_var).grid(row=7, column=1, sticky='we')
+        ttk.Label(frm, text='POSE epochs/imgsz/batch').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_epochs_var, width=8).grid(row=8, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_imgsz_var, width=8).grid(row=8, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_batch_var, width=8).grid(row=8, column=1, padx=(140,0), sticky='w')
+
+        ttk.Label(frm, text='Device/workers').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=9, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=9, column=1, padx=(70,0), sticky='w')
+
+        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=10, column=0, pady=10, sticky='w')
+        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=11, column=0, columnspan=3, sticky='w')
+        frm.columnconfigure(1, weight=1)
+
     def pick_video(self):
         p = filedialog.askopenfilename(title='Select video')
         if p:
@@ -1183,6 +1266,65 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title='Select background folder for obstruction generation')
         if p:
             self.obs_bg_dir_var.set(p)
+
+    def pick_headcam_unity_dir(self):
+        p = filedialog.askdirectory(title='Select Unity export root (RGB/MASK/annotations)')
+        if p:
+            self.hc_unity_dir_var.set(p)
+
+    def headcam_import_unity_bundle(self):
+        if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
+            return
+        unity_dir = self.hc_unity_dir_var.get().strip()
+        if not unity_dir:
+            self.log_line('HeadCam: select Unity export folder first.')
+            return
+        run = self.hc_run_var.get().strip() or 'headcam01'
+        pose_out = ROOT / 'data_pose' / run
+
+        cmd_seg = [
+            str(PY), 'scripts/import_unity_red_masks.py',
+            '--unity-dir', unity_dir,
+            '--class-name', self.class_var.get(),
+            '--class-id', self.class_id_var.get(),
+            '--run-name', run,
+            '--red-threshold', self.hc_red_thr_var.get(),
+        ]
+        cmd_pose = [
+            str(PY), 'scripts/convert_unity_pose_json.py',
+            '--unity-dir', unity_dir,
+            '--out-dir', str(pose_out),
+            '--train-ratio', self.hc_pose_train_ratio_var.get(),
+            '--class-name', self.class_var.get(),
+        ]
+        self.run_cmd_chain([cmd_seg, cmd_pose])
+
+    def headcam_train_chain(self):
+        run = self.hc_run_var.get().strip() or 'headcam01'
+        pose_yaml = ROOT / 'data_pose' / run / 'dataset.yaml'
+
+        cmd_seg = [
+            str(PY), 'scripts/train_yolo_seg.py',
+            '--model', self.hc_seg_model_var.get(),
+            '--epochs', self.hc_seg_epochs_var.get(),
+            '--imgsz', self.hc_seg_imgsz_var.get(),
+            '--batch', self.hc_seg_batch_var.get(),
+            '--device', self.hc_device_var.get(),
+            '--workers', self.hc_workers_var.get(),
+            '--name', f'headcam_seg_{run}',
+        ]
+        cmd_pose = [
+            str(PY), 'scripts/train_yolo_pose.py',
+            '--model', self.hc_pose_model_var.get(),
+            '--data', str(pose_yaml),
+            '--epochs', self.hc_pose_epochs_var.get(),
+            '--imgsz', self.hc_pose_imgsz_var.get(),
+            '--batch', self.hc_pose_batch_var.get(),
+            '--device', self.hc_device_var.get(),
+            '--workers', self.hc_workers_var.get(),
+            '--name', f'headcam_pose_{run}',
+        ]
+        self.run_cmd_chain([cmd_seg, cmd_pose])
 
     def autolabel(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
