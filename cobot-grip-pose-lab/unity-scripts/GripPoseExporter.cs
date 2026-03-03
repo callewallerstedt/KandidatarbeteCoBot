@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 public class GripPoseExporter : MonoBehaviour
@@ -8,6 +9,10 @@ public class GripPoseExporter : MonoBehaviour
     public Camera renderCamera;
     [Header("Optional mask camera (renders red object on black)")]
     public Camera maskCamera;
+    public string maskLayerName = "SegmentationMask";
+    public Shader maskShader;
+    public bool forceMaskReplacementShader = true;
+
     public string outputRoot = "unity_export";
     public string cameraTag = "cobot"; // cobot, roof1, roof2 ...
     public int width = 1920;
@@ -43,6 +48,35 @@ public class GripPoseExporter : MonoBehaviour
         Directory.CreateDirectory(Path.Combine(outputRoot, "annotations", cameraTag));
     }
 
+    private void EnsureObjectList()
+    {
+        if (objects != null && objects.Count > 0) return;
+        objects = FindObjectsByType<GripAnnotatable>(FindObjectsSortMode.None).ToList();
+        Debug.Log($"[GripPoseExporter] Auto-found GripAnnotatable objects: {objects.Count}");
+    }
+
+    private void ConfigureMaskCameraIfNeeded()
+    {
+        if (maskCamera == null || !forceMaskReplacementShader) return;
+
+        int layer = LayerMask.NameToLayer(maskLayerName);
+        if (layer >= 0)
+            maskCamera.cullingMask = 1 << layer;
+
+        maskCamera.clearFlags = CameraClearFlags.SolidColor;
+        maskCamera.backgroundColor = Color.black;
+        maskCamera.allowHDR = false;
+        maskCamera.allowMSAA = false;
+
+        if (maskShader == null)
+            maskShader = Shader.Find("Hidden/ObjectMaskRed");
+
+        if (maskShader != null)
+            maskCamera.SetReplacementShader(maskShader, "");
+        else
+            Debug.LogWarning("[GripPoseExporter] maskShader missing. Assign ObjectMaskRed shader.");
+    }
+
     public void CaptureFrame(int frameIndex)
     {
         if (renderCamera == null)
@@ -52,6 +86,8 @@ public class GripPoseExporter : MonoBehaviour
         }
 
         EnsureDirs();
+        EnsureObjectList();
+        ConfigureMaskCameraIfNeeded();
 
         string imageName = $"frame_{frameIndex:D6}.png";
         string rgbPath = Path.Combine(outputRoot, "RGB", cameraTag, imageName);
@@ -63,10 +99,17 @@ public class GripPoseExporter : MonoBehaviour
 
         FrameAnn ann = new FrameAnn { image = imageName, width = width, height = height };
 
+        int missingKp = 0;
+        int behindCam = 0;
+        int badBox = 0;
+
         foreach (var obj in objects)
         {
             if (obj == null || obj.centerPoint == null || obj.gripPointA == null || obj.gripPointB == null)
+            {
+                missingKp++;
                 continue;
+            }
 
             Vector3 c = renderCamera.WorldToScreenPoint(obj.centerPoint.position);
             Vector3 a = renderCamera.WorldToScreenPoint(obj.gripPointA.position);
@@ -74,10 +117,16 @@ public class GripPoseExporter : MonoBehaviour
 
             // Skip if keypoints behind camera
             if (c.z <= 0f || a.z <= 0f || b.z <= 0f)
+            {
+                behindCam++;
                 continue;
+            }
 
             if (!TryProjectBounds(obj.GetWorldBounds(), out float x1, out float y1, out float x2, out float y2))
+            {
+                badBox++;
                 continue;
+            }
 
             // Unity screen origin is bottom-left; convert to image top-left convention
             float cY = height - c.y;
@@ -96,7 +145,7 @@ public class GripPoseExporter : MonoBehaviour
 
         string jsonPath = Path.Combine(outputRoot, "annotations", cameraTag, $"frame_{frameIndex:D6}.json");
         File.WriteAllText(jsonPath, JsonUtility.ToJson(ann, true));
-        Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} rgb={rgbPath}" + (maskCamera != null ? $" mask={maskPath}" : " (no maskCamera set)") + $" ann={jsonPath}");
+        Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} missingKp={missingKp} behindCam={behindCam} badBox={badBox} rgb={rgbPath}" + (maskCamera != null ? $" mask={maskPath}" : " (no maskCamera set)") + $" ann={jsonPath}");
     }
 
     private void SaveCameraPng(Camera cam, string outPath)
