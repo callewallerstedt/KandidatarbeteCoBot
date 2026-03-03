@@ -29,7 +29,7 @@ def main():
     rgb_n=mask_n=ann_n=0
     if rgb and rgb.exists(): rgb_n=sum(1 for p in rgb.rglob('*') if p.suffix.lower() in IMG_EXTS)
     if mask and mask.exists(): mask_n=sum(1 for p in mask.rglob('*') if p.suffix.lower() in IMG_EXTS)
-    if ann and ann.exists(): ann_n=len(list(ann.glob('*.json')))
+    if ann and ann.exists(): ann_n=len(list(ann.rglob('*.json')))
     print(f'RGB files: {rgb_n}')
     print(f'MASK files: {mask_n}')
     print(f'ANN json files: {ann_n}')

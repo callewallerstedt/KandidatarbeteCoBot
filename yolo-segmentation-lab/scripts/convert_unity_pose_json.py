@@ -41,10 +41,14 @@ def main():
     if not rgb_dir or not ann_dir or not rgb_dir.exists() or not ann_dir.exists():
         raise RuntimeError('unity-dir must contain an RGB-like image folder and an annotations JSON folder')
     frames = []
-    for jp in sorted(ann_dir.glob('*.json')):
+    for jp in sorted(ann_dir.rglob('*.json')):
         d = json.loads(jp.read_text(encoding='utf-8'))
         img_name = d.get('image', '')
         img = rgb_dir / img_name
+        if not img.exists():
+            # try same relative subdir as annotation file
+            relp = jp.relative_to(ann_dir).parent
+            img = rgb_dir / relp / img_name
         if not img.exists() or img.suffix.lower() not in IMG_EXTS:
             continue
         if not isinstance(d.get('objects', []), list):

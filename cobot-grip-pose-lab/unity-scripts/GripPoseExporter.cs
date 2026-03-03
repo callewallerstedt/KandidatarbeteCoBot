@@ -9,6 +9,7 @@ public class GripPoseExporter : MonoBehaviour
     [Header("Optional mask camera (renders red object on black)")]
     public Camera maskCamera;
     public string outputRoot = "unity_export";
+    public string cameraTag = "cobot"; // cobot, roof1, roof2 ...
     public int width = 1920;
     public int height = 1080;
     public int pngQuality = 100;
@@ -37,9 +38,9 @@ public class GripPoseExporter : MonoBehaviour
 
     private void EnsureDirs()
     {
-        Directory.CreateDirectory(Path.Combine(outputRoot, "RGB"));
-        Directory.CreateDirectory(Path.Combine(outputRoot, "MASK"));
-        Directory.CreateDirectory(Path.Combine(outputRoot, "annotations"));
+        Directory.CreateDirectory(Path.Combine(outputRoot, "RGB", cameraTag));
+        Directory.CreateDirectory(Path.Combine(outputRoot, "MASK", cameraTag));
+        Directory.CreateDirectory(Path.Combine(outputRoot, "annotations", cameraTag));
     }
 
     public void CaptureFrame(int frameIndex)
@@ -53,8 +54,8 @@ public class GripPoseExporter : MonoBehaviour
         EnsureDirs();
 
         string imageName = $"frame_{frameIndex:D6}.png";
-        string rgbPath = Path.Combine(outputRoot, "RGB", imageName);
-        string maskPath = Path.Combine(outputRoot, "MASK", imageName);
+        string rgbPath = Path.Combine(outputRoot, "RGB", cameraTag, imageName);
+        string maskPath = Path.Combine(outputRoot, "MASK", cameraTag, imageName);
 
         SaveCameraPng(renderCamera, rgbPath);
         if (maskCamera != null)
@@ -93,7 +94,7 @@ public class GripPoseExporter : MonoBehaviour
             });
         }
 
-        string jsonPath = Path.Combine(outputRoot, "annotations", $"frame_{frameIndex:D6}.json");
+        string jsonPath = Path.Combine(outputRoot, "annotations", cameraTag, $"frame_{frameIndex:D6}.json");
         File.WriteAllText(jsonPath, JsonUtility.ToJson(ann, true));
         Debug.Log($"[GripPoseExporter] frame {frameIndex}: objects={ann.objects.Count} rgb={rgbPath}" + (maskCamera != null ? $" mask={maskPath}" : " (no maskCamera set)") + $" ann={jsonPath}");
     }

@@ -1045,6 +1045,7 @@ class App(tk.Tk):
         self.hc_red_thr_var = tk.StringVar(value='120')
         self.hc_pose_train_ratio_var = tk.StringVar(value='0.90')
         self.hc_capture_n_var = tk.StringVar(value='200')
+        self.hc_capture_profile_var = tk.StringVar(value='cobot')
 
         self.hc_seg_model_var = tk.StringVar(value='yolo11s-seg.pt')
         self.hc_seg_epochs_var = tk.StringVar(value='100')
@@ -1072,35 +1073,37 @@ class App(tk.Tk):
 
         ttk.Label(frm, text='Unity capture N').grid(row=3, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.hc_capture_n_var, width=10).grid(row=3, column=1, sticky='w')
-        ttk.Button(frm, text='Unity test randomize once', command=self.headcam_unity_randomize_once).grid(row=3, column=1, padx=(90,0), sticky='w')
-        ttk.Button(frm, text='Unity capture 1', command=self.headcam_unity_capture_one).grid(row=3, column=2, sticky='w')
+        ttk.Label(frm, text='Profile').grid(row=3, column=1, padx=(90,0), sticky='w')
+        ttk.Combobox(frm, textvariable=self.hc_capture_profile_var, values=['cobot', 'roof', 'all'], state='readonly', width=8).grid(row=3, column=1, padx=(140,0), sticky='w')
+        ttk.Button(frm, text='Unity test randomize once', command=self.headcam_unity_randomize_once).grid(row=3, column=2, sticky='w')
 
-        ttk.Button(frm, text='Unity capture N', command=self.headcam_unity_capture_n).grid(row=4, column=0, pady=6, sticky='w')
-        ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=4, column=1, pady=6, sticky='w')
-        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=4, column=2, pady=6, sticky='w')
+        ttk.Button(frm, text='Unity capture 1', command=self.headcam_unity_capture_one).grid(row=4, column=0, pady=6, sticky='w')
+        ttk.Button(frm, text='Unity capture N', command=self.headcam_unity_capture_n).grid(row=4, column=1, pady=6, sticky='w')
+        ttk.Button(frm, text='Validate Unity bundle', command=self.headcam_validate_unity_bundle).grid(row=4, column=2, pady=6, sticky='w')
+        ttk.Button(frm, text='Import Unity bundle (Seg + Pose dataset)', command=self.headcam_import_unity_bundle).grid(row=5, column=0, pady=6, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Separator(frm, orient='horizontal').grid(row=6, column=0, columnspan=3, sticky='we', pady=8)
 
-        ttk.Label(frm, text='SEG model').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_model_var).grid(row=6, column=1, sticky='we')
-        ttk.Label(frm, text='SEG epochs/imgsz/batch').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_epochs_var, width=8).grid(row=7, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_imgsz_var, width=8).grid(row=7, column=1, padx=(70,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_seg_batch_var, width=8).grid(row=7, column=1, padx=(140,0), sticky='w')
+        ttk.Label(frm, text='SEG model').grid(row=7, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_model_var).grid(row=7, column=1, sticky='we')
+        ttk.Label(frm, text='SEG epochs/imgsz/batch').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_epochs_var, width=8).grid(row=8, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_imgsz_var, width=8).grid(row=8, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_seg_batch_var, width=8).grid(row=8, column=1, padx=(140,0), sticky='w')
 
-        ttk.Label(frm, text='POSE model').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_model_var).grid(row=8, column=1, sticky='we')
-        ttk.Label(frm, text='POSE epochs/imgsz/batch').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_epochs_var, width=8).grid(row=9, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_imgsz_var, width=8).grid(row=9, column=1, padx=(70,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_pose_batch_var, width=8).grid(row=9, column=1, padx=(140,0), sticky='w')
+        ttk.Label(frm, text='POSE model').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_model_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='POSE epochs/imgsz/batch').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_epochs_var, width=8).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_imgsz_var, width=8).grid(row=10, column=1, padx=(70,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_pose_batch_var, width=8).grid(row=10, column=1, padx=(140,0), sticky='w')
 
-        ttk.Label(frm, text='Device/workers').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=10, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=10, column=1, padx=(70,0), sticky='w')
+        ttk.Label(frm, text='Device/workers').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_device_var, width=8).grid(row=11, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.hc_workers_var, width=8).grid(row=11, column=1, padx=(70,0), sticky='w')
 
-        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=11, column=0, pady=10, sticky='w')
-        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=12, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Train Seg -> then Pose (chain)', command=self.headcam_train_chain).grid(row=12, column=0, pady=10, sticky='w')
+        ttk.Label(frm, text='Flow: Unity capture -> Import bundle -> Train Seg -> Train Pose').grid(row=13, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def pick_video(self):
@@ -1293,6 +1296,7 @@ class App(tk.Tk):
         payload = {
             'command': command,
             'count': int(max(1, count)),
+            'profile': (self.hc_capture_profile_var.get().strip() or 'cobot'),
             'run_name': (self.hc_run_var.get().strip() or 'headcam01'),
             'timestamp': int(__import__('time').time()),
         }

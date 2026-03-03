@@ -50,10 +50,17 @@ Copy scripts from `unity-scripts/` into your Unity project:
    - Click `Start Capture` from Inspector context menu (or enable `autoStart`).
 
 5. (Optional, recommended) Add `UnityCommandBridge` for remote control from Tkinter GUI.
-   - Link `randomizer` + `exporter`.
+   - Link `randomizer`.
+   - Link `cobotExporter` (head camera exporter with keypoints).
+   - Link `roofExporters` array (one exporter per roof camera).
    - Set `unityExportRoot` to same folder used by the GUI.
    - It polls `<unityExportRoot>/_commands/next_command.json`.
    - It sets `Application.runInBackground=true`, so commands work even when Unity window is not focused.
+
+Exporters now support `cameraTag` and save to:
+- `RGB/<cameraTag>/frame_XXXXXX.png`
+- `MASK/<cameraTag>/frame_XXXXXX.png`
+- `annotations/<cameraTag>/frame_XXXXXX.json`
 
 ## Expected Unity export layout
 ```

@@ -40,7 +40,7 @@ py -3.11 -m venv .venv
 - Training (with configurable dataloader workers; on Windows use workers=0 for stability)
 - DDP Multi-PC (guided multi-node launch helper for 2+ computers: host checks, rank settings, generated launch commands, local node start)
 - Inference (including explicit webcam capture resolution controls, higher default 1920x1080 display, polygon-based high-quality mask overlay, per-instance colors, instance count logging, and optional human arm joint tracking overlay).
-- HeadCam Unity (Seg+Pose): one tab to import Unity bundle (RGB+MASK+annotations), then chain-train segmentation followed by keypoint pose.
+- HeadCam Unity (Seg+Pose): one tab to send Unity capture commands (randomize/capture for cobot/roof/all profiles), import Unity bundle (RGB+MASK+annotations), then chain-train segmentation followed by keypoint pose.
 
 ## Synthetic run folders
 - Synthetic generation now keeps the selected background image proportions (no forced crop to source image aspect ratio).
