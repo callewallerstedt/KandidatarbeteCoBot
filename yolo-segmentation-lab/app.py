@@ -1371,6 +1371,15 @@ class App(tk.Tk):
         ]
         self.run_cmd_chain([cmd_seg, cmd_pose])
 
+    def _headcam_build_split_cmd(self):
+        run = self.hc_run_var.get().strip() or 'headcam01'
+        return [
+            str(PY), 'scripts/build_dataset_split.py',
+            '--mode', 'unity',
+            '--class-name', self.class_var.get(),
+            '--run-name', run,
+        ]
+
     def _headcam_seg_cmd(self):
         run = self.hc_run_var.get().strip() or 'headcam01'
         return [
@@ -1400,13 +1409,13 @@ class App(tk.Tk):
         ]
 
     def headcam_train_seg_only(self):
-        self.run_cmd(self._headcam_seg_cmd())
+        self.run_cmd_chain([self._headcam_build_split_cmd(), self._headcam_seg_cmd()])
 
     def headcam_train_pose_only(self):
         self.run_cmd(self._headcam_pose_cmd())
 
     def headcam_train_chain(self):
-        self.run_cmd_chain([self._headcam_seg_cmd(), self._headcam_pose_cmd()])
+        self.run_cmd_chain([self._headcam_build_split_cmd(), self._headcam_seg_cmd(), self._headcam_pose_cmd()])
 
     def autolabel(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
