@@ -394,6 +394,53 @@ class App(tk.Tk):
             self.log_line(f'Failed to auto-register class in dataset.yaml: {e}')
             return False
 
+    def _on_data_class_change(self):
+        self.auto_assign_class_id(self.class_var, self.class_id_var)
+        self.refresh_component_options()
+
+    def refresh_component_options(self):
+        cname = (self.class_var.get() or '').strip()
+        comps = []
+        if cname:
+            croot = ROOT / 'data' / 'images' / cname / 'components'
+            if croot.exists():
+                comps = sorted([p.name for p in croot.iterdir() if p.is_dir()])
+        if 'main' not in comps:
+            comps.insert(0, 'main')
+        self.component_choices = comps or ['main']
+        cb = getattr(self, 'data_component_cb', None)
+        if cb is not None:
+            cb['values'] = self.component_choices
+        cur = (self.auto_component_var.get() or '').strip()
+        if not cur or cur not in self.component_choices:
+            self.auto_component_var.set(self.component_choices[0])
+
+    def delete_selected_component(self):
+        cname = (self.class_var.get() or '').strip()
+        comp = (self.auto_component_var.get() or '').strip()
+        if not cname or not comp:
+            self.log_line('Select class and component first.')
+            return
+        if comp == 'main':
+            self.log_line('Refusing to delete default component "main".')
+            return
+
+        targets = [
+            ROOT / 'data' / 'images' / cname / 'components' / comp,
+            ROOT / 'data' / 'labels' / cname / 'components' / comp,
+            ROOT / 'data' / 'staging' / cname / 'autolabel' / comp,
+        ]
+        removed_any = False
+        import shutil
+        for t in targets:
+            if t.exists():
+                shutil.rmtree(t, ignore_errors=True)
+                removed_any = True
+                self.log_line(f'Removed: {t}')
+        if not removed_any:
+            self.log_line(f'No folders found for component={comp}')
+        self.refresh_component_options()
+
     def refresh_class_options(self):
         data_images = ROOT / 'data' / 'images'
         names = []
@@ -435,6 +482,8 @@ class App(tk.Tk):
             if not self.split_class_var.get() or self.split_class_var.get() not in self.split_class_choices:
                 self.split_class_var.set('ALL classes')
 
+        self.refresh_component_options()
+
     def build_data_tab(self):
         frm = self.tab_data
 
@@ -456,7 +505,8 @@ class App(tk.Tk):
         self.split_mode_var = tk.StringVar(value='all')
         self.split_class_var = tk.StringVar(value='ALL classes')
         self.split_run_var = tk.StringVar(value='')
-        self.class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.class_var, self.class_id_var))
+        self.class_var.trace_add('write', lambda *_: self._on_data_class_change())
+        self.component_choices = ['main']
         self.unity_dir_var = tk.StringVar()
         self.unity_run_var = tk.StringVar(value='')
         self.unity_red_thr_var = tk.StringVar(value='120')
@@ -469,8 +519,8 @@ class App(tk.Tk):
         self.data_class_cb = ttk.Combobox(frm, textvariable=self.class_var)
         self.data_class_cb.grid(row=1, column=1, sticky='we')
 
-        ttk.Label(frm, text='Class id').grid(row=2, column=0, sticky='w')
-        self.data_class_id_cb = ttk.Combobox(frm, textvariable=self.class_id_var, values=self.class_id_choices, width=8)
+        ttk.Label(frm, text='Class id (auto)').grid(row=2, column=0, sticky='w')
+        self.data_class_id_cb = ttk.Combobox(frm, textvariable=self.class_id_var, values=self.class_id_choices, width=8, state='readonly')
         self.data_class_id_cb.grid(row=2, column=1, sticky='w')
 
         ttk.Label(frm, text='Target samples (evenly across video)').grid(row=3, column=0, sticky='w')
@@ -488,56 +538,60 @@ class App(tk.Tk):
         ttk.Label(frm, text='Mask quality').grid(row=7, column=0, sticky='w')
         ttk.Combobox(frm, textvariable=self.mask_quality_var, values=['fast', 'high'], state='readonly', width=10).grid(row=7, column=1, sticky='w')
 
-        ttk.Label(frm, text='Component name').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_component_var, width=20).grid(row=8, column=1, sticky='w')
-        ttk.Label(frm, text='Run name (optional)').grid(row=8, column=1, padx=(170,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_run_var, width=20).grid(row=8, column=2, sticky='w')
+        ttk.Label(frm, text='Component').grid(row=8, column=0, sticky='w')
+        self.data_component_cb = ttk.Combobox(frm, textvariable=self.auto_component_var, values=self.component_choices, width=20)
+        self.data_component_cb.grid(row=8, column=1, sticky='w')
+        ttk.Button(frm, text='Refresh components', command=self.refresh_component_options).grid(row=8, column=1, padx=(170,0), sticky='w')
+        ttk.Button(frm, text='Delete selected component', command=self.delete_selected_component).grid(row=8, column=2, sticky='w')
 
-        ttk.Label(frm, text='Min/Max area ratio').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_min_area_var, width=8).grid(row=9, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_max_area_var, width=8).grid(row=9, column=1, padx=(70,0), sticky='w')
-        ttk.Label(frm, text='Poly eps').grid(row=9, column=1, padx=(150,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_poly_eps_var, width=10).grid(row=9, column=2, sticky='w')
+        ttk.Label(frm, text='Run name (optional)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_run_var, width=20).grid(row=9, column=1, sticky='w')
 
-        ttk.Label(frm, text='Preview count').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.auto_preview_count_var, width=8).grid(row=10, column=1, sticky='w')
-        ttk.Button(frm, text='Preview auto-labeled frames', command=self.preview_autolabel).grid(row=10, column=2, sticky='w')
+        ttk.Label(frm, text='Min/Max area ratio').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_min_area_var, width=8).grid(row=10, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_max_area_var, width=8).grid(row=10, column=1, padx=(70,0), sticky='w')
+        ttk.Label(frm, text='Poly eps').grid(row=10, column=1, padx=(150,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_poly_eps_var, width=10).grid(row=10, column=2, sticky='w')
 
-        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=11, column=0, pady=8)
+        ttk.Label(frm, text='Preview count').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_preview_count_var, width=8).grid(row=11, column=1, sticky='w')
+        ttk.Button(frm, text='Preview auto-labeled frames', command=self.preview_autolabel).grid(row=11, column=2, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=13, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_dir_var, width=70).grid(row=13, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_unity_dir).grid(row=13, column=2)
+        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=12, column=0, pady=8)
 
-        ttk.Label(frm, text='Pairing is automatic by relative path/name (single folder workflow)').grid(row=14, column=0, columnspan=3, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_dir_var, width=70).grid(row=14, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_unity_dir).grid(row=14, column=2)
 
-        ttk.Label(frm, text='Unity run name (optional)').grid(row=15, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=15, column=1, sticky='w')
-        ttk.Label(frm, text='Red threshold').grid(row=15, column=1, padx=(320,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_red_thr_var, width=8).grid(row=15, column=2, sticky='w')
+        ttk.Label(frm, text='Pairing is automatic by relative path/name (single folder workflow)').grid(row=15, column=0, columnspan=3, sticky='w')
 
-        ttk.Button(frm, text='Import Unity RGB + red masks', command=self.import_unity_red_masks).grid(row=16, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='Unity run name (optional)').grid(row=16, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=16, column=1, sticky='w')
+        ttk.Label(frm, text='Red threshold').grid(row=16, column=1, padx=(320,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_red_thr_var, width=8).grid(row=16, column=2, sticky='w')
 
-        ttk.Label(frm, text='Split mode').grid(row=17, column=1, sticky='e')
-        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs', 'unity'], state='readonly', width=10).grid(row=17, column=2, sticky='w')
+        ttk.Button(frm, text='Import Unity RGB + red masks', command=self.import_unity_red_masks).grid(row=17, column=0, pady=8, sticky='w')
 
-        ttk.Label(frm, text='Split class').grid(row=18, column=0, sticky='w')
+        ttk.Label(frm, text='Split mode').grid(row=18, column=1, sticky='e')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs', 'unity'], state='readonly', width=10).grid(row=18, column=2, sticky='w')
+
+        ttk.Label(frm, text='Split class').grid(row=19, column=0, sticky='w')
         self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
-        self.split_class_cb.grid(row=18, column=1, sticky='w')
+        self.split_class_cb.grid(row=19, column=1, sticky='w')
 
-        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=19, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=19, column=1, sticky='w')
+        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=20, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=20, column=1, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs/unity | synth = synth runs | obs = obs runs | unity = unity runs').grid(row=20, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=21, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='all = all data | real = no synth/obs/unity | synth = synth runs | obs = obs runs | unity = unity runs').grid(row=21, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=22, column=0, pady=8, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=22, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Separator(frm, orient='horizontal').grid(row=23, column=0, columnspan=3, sticky='we', pady=8)
 
-        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=23, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=23, column=1, sticky='we')
-        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=23, column=2)
-        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=24, column=0, pady=6, sticky='w')
+        ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=24, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=24, column=1, sticky='we')
+        ttk.Button(frm, text='Update dataset.yaml', command=self.update_yaml).grid(row=24, column=2)
+        ttk.Button(frm, text='Auto-sync dataset.yaml from data folders', command=self.sync_yaml_from_folders).grid(row=25, column=0, pady=6, sticky='w')
 
         frm.columnconfigure(1, weight=1)
 
