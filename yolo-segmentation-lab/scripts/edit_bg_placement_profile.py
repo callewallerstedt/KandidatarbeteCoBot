@@ -27,20 +27,20 @@ def main():
     if not files:
         raise RuntimeError('No background images found')
 
-    p = Path(args.profile)
+    profile_path = Path(args.profile)
     data = {'items': {}}
-    if p.exists():
+    if profile_path.exists():
         try:
-            data = json.loads(p.read_text(encoding='utf-8'))
+            data = json.loads(profile_path.read_text(encoding='utf-8'))
             if 'items' not in data:
                 data = {'items': {}}
         except Exception:
             data = {'items': {}}
 
     def save_now():
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(data, indent=2), encoding='utf-8')
-        print(f'Auto-saved profile: {p}')
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+        print(f'Auto-saved profile: {profile_path}')
 
     idx = 0
     while True:
@@ -56,7 +56,7 @@ def main():
         disp, s = fit(img)
         h, w = disp.shape[:2]
         if isinstance(item.get('poly'), list) and len(item.get('poly')) >= 3:
-            poly = np.array([[int(p[0] * w), int(p[1] * h)] for p in item['poly']], dtype=np.int32)
+            poly = np.array([[int(pt[0] * w), int(pt[1] * h)] for pt in item['poly']], dtype=np.int32)
             cv2.polylines(disp, [poly.reshape(-1, 1, 2)], True, (0, 255, 255), 2, cv2.LINE_AA)
         else:
             rx1, ry1, rx2, ry2 = item['rect']
@@ -64,7 +64,7 @@ def main():
             cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 255), 2)
         txt = f'{idx+1}/{len(files)} {fp.name}  min={item.get("min_scale",0.55):.2f} max={item.get("max_scale",1.25):.2f}'
         cv2.putText(disp, txt, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2, cv2.LINE_AA)
-        cv2.putText(disp, 'n/p next-prev | r draw rect | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
+        cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
         cv2.imshow('BG Placement Profile Editor', disp)
         k = cv2.waitKey(0) & 0xFF
@@ -92,8 +92,8 @@ def main():
             while True:
                 disp2 = sel_img.copy()
                 if len(points) > 0:
-                    for p in points:
-                        cv2.circle(disp2, p, 3, (0, 255, 255), -1)
+                    for pt in points:
+                        cv2.circle(disp2, pt, 3, (0, 255, 255), -1)
                     for i2 in range(1, len(points)):
                         cv2.line(disp2, points[i2 - 1], points[i2], (0, 255, 255), 2, cv2.LINE_AA)
                 cv2.putText(disp2, 'Left click: add corner, Right click/Enter: finish polygon, c: cancel', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
@@ -114,8 +114,8 @@ def main():
                     poly.append([round(float(x / max(1, pw)), 4), round(float(y / max(1, ph)), 4)])
                 item['poly'] = poly
                 # keep a compatible rect bbox too
-                xs = [p[0] for p in poly]
-                ys = [p[1] for p in poly]
+                xs = [pt[0] for pt in poly]
+                ys = [pt[1] for pt in poly]
                 item['rect'] = [min(xs), min(ys), max(xs), max(ys)]
                 data['items'][key] = item
                 save_now()
@@ -142,15 +142,11 @@ def main():
             save_now()
             continue
         if k == ord('s'):
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(data, indent=2), encoding='utf-8')
-            print(f'Saved profile: {p}')
+            save_now()
             continue
 
     cv2.destroyAllWindows()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2), encoding='utf-8')
-    print(f'Saved profile: {p}')
+    save_now()
 
 
 if __name__ == '__main__':
