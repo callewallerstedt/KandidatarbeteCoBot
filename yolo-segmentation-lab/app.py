@@ -169,6 +169,7 @@ class App(tk.Tk):
             'workers_var': self.workers_var,
             'weights_var': self.weights_var,
             'source_var': self.source_var,
+            'video_var': self.video_var,
             'infer_imgsz_var': self.infer_imgsz_var,
             'infer_conf_var': self.infer_conf_var,
             'mask_smooth_var': self.mask_smooth_var,
@@ -514,9 +515,10 @@ class App(tk.Tk):
         self.unity_run_var = tk.StringVar(value='')
         self.unity_red_thr_var = tk.StringVar(value='120')
 
-        ttk.Label(frm, text='Video file').grid(row=0, column=0, sticky='w')
+        ttk.Label(frm, text='Video file or folder').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.video_var, width=70).grid(row=0, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_video).grid(row=0, column=2)
+        ttk.Button(frm, text='Browse file', command=self.pick_video).grid(row=0, column=2)
+        ttk.Button(frm, text='Browse folder', command=self.pick_video_folder).grid(row=0, column=2, padx=(90,0), sticky='w')
 
         ttk.Label(frm, text='Class name').grid(row=1, column=0, sticky='w')
         self.data_class_cb = ttk.Combobox(frm, textvariable=self.class_var)
@@ -1302,6 +1304,19 @@ class App(tk.Tk):
         if p:
             self.video_var.set(p)
 
+    def pick_video_folder(self):
+        p = filedialog.askdirectory(title='Select folder containing videos for auto-labeling')
+        if p:
+            self.video_var.set(p)
+            try:
+                pp = Path(p)
+                self.auto_component_var.set(pp.name)
+                parent = pp.parent.name
+                if parent and parent.lower() not in {'videos', 'video', 'clips'}:
+                    self.class_var.set(parent)
+            except Exception:
+                pass
+
     def pick_weights(self):
         p = filedialog.askopenfilename(title='Select weights', filetypes=[('PyTorch', '*.pt'), ('All files', '*.*')])
         if p:
@@ -1640,9 +1655,9 @@ class App(tk.Tk):
         self.run_cmd_chain([self._headcam_build_split_cmd(), self._headcam_seg_cmd(), self._headcam_pose_cmd()])
 
     def _autolabel_cmd_base(self):
+        src = (self.video_var.get() or '').strip()
         cmd = [
             str(PY), 'scripts/video_to_yoloseg_autolabel.py',
-            '--video', self.video_var.get(),
             '--class-name', self.class_var.get(),
             '--class-id', self.class_id_var.get(),
             '--component-name', self.auto_component_var.get(),
@@ -1656,6 +1671,10 @@ class App(tk.Tk):
             '--poly-eps', self.auto_poly_eps_var.get(),
             '--alpha-threshold', self.auto_alpha_thr_var.get(),
         ]
+        if src and Path(src).is_dir():
+            cmd.extend(['--video-dir', src])
+        else:
+            cmd.extend(['--video', src])
         if self.auto_run_var.get().strip():
             cmd.extend(['--run-name', self.auto_run_var.get().strip()])
         return cmd

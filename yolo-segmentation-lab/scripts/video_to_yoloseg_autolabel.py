@@ -77,7 +77,8 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--video', required=True)
+    ap.add_argument('--video', default='')
+    ap.add_argument('--video-dir', default='')
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
     ap.add_argument('--out-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
@@ -94,6 +95,8 @@ def main():
     ap.add_argument('--alpha-threshold', type=int, default=-1, help='Alpha threshold for foreground mask (0-255). Lower=more sensitive, higher=stricter.')
     ap.add_argument('--preview-only', action='store_true', help='Generate previews only (no train image/label writes)')
     ap.add_argument('--preview-count', type=int, default=16, help='Limit previews when --preview-only is set')
+    ap.add_argument('--preview-max-width', type=int, default=1600)
+    ap.add_argument('--preview-max-height', type=int, default=900)
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
@@ -117,40 +120,52 @@ def main():
         mask_dir.mkdir(parents=True, exist_ok=True)
         reject_dir.mkdir(parents=True, exist_ok=True)
 
-    cap = cv2.VideoCapture(args.video)
-    if not cap.isOpened():
-        raise RuntimeError(f'Cannot open video: {args.video}')
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    if total_frames <= 0:
-        print('Warning: could not detect total frame count, fallback to --every sampling.')
-
-    sample_indices = None
-    if args.num_samples > 0 and total_frames > 0:
-        n = min(args.num_samples, total_frames)
-        sample_indices = set(np.linspace(0, total_frames - 1, num=n, dtype=int).tolist())
-        print(f'Video frames detected: {total_frames}. Evenly sampling {len(sample_indices)} frames.')
+    video_files = []
+    if args.video_dir.strip():
+        vdir = Path(args.video_dir)
+        exts = {'.mp4', '.avi', '.mov', '.mkv', '.m4v', '.wmv'}
+        video_files = sorted([p for p in vdir.rglob('*') if p.suffix.lower() in exts])
+        if not video_files:
+            raise RuntimeError(f'No video files found in folder: {vdir}')
+    elif args.video.strip():
+        video_files = [Path(args.video)]
     else:
-        print('Using --every sampling mode.')
+        raise RuntimeError('Provide --video or --video-dir')
+
+    print(f'Autolabel video sources: {len(video_files)}')
 
     idx = 0
     kept = 0
     rejected = 0
     previews = []
     target_kept = args.preview_count if args.preview_only else args.max_frames
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+    for vf in video_files:
+        cap = cv2.VideoCapture(str(vf))
+        if not cap.isOpened():
+            print(f'Warning: cannot open video: {vf}')
+            continue
 
-        if sample_indices is not None:
-            if idx not in sample_indices:
-                idx += 1
-                continue
-        else:
-            if idx % args.every != 0:
-                idx += 1
-                continue
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        sample_indices = None
+        if args.num_samples > 0 and total_frames > 0:
+            per_video = max(1, int(np.ceil(args.num_samples / max(1, len(video_files)))))
+            n = min(per_video, total_frames)
+            sample_indices = set(np.linspace(0, total_frames - 1, num=n, dtype=int).tolist())
+        local_idx = 0
+
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+
+            if sample_indices is not None:
+                if local_idx not in sample_indices:
+                    local_idx += 1
+                    continue
+            else:
+                if local_idx % args.every != 0:
+                    local_idx += 1
+                    continue
 
         for a in range(args.aug_per_frame + 1):
             img = frame if a == 0 else augment(frame)
@@ -191,11 +206,12 @@ def main():
             if kept >= target_kept:
                 break
 
+            local_idx += 1
+
+        cap.release()
         if kept >= target_kept:
             break
         idx += 1
-
-    cap.release()
     mode = 'PREVIEW_ONLY' if args.preview_only else 'WRITE_DATASET'
     print(f'Autolabel mode: {mode}')
     print(f'Created {kept} samples for class={args.class_name} class_id={args.class_id} component={comp} run={run_name}')
@@ -208,6 +224,10 @@ def main():
             while True:
                 show = previews[i].copy()
                 cv2.putText(show, f'{i+1}/{len(previews)}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+                h0, w0 = show.shape[:2]
+                s = min(args.preview_max_width / max(1, w0), args.preview_max_height / max(1, h0), 1.0)
+                if s < 1.0:
+                    show = cv2.resize(show, (int(w0 * s), int(h0 * s)), interpolation=cv2.INTER_AREA)
                 cv2.imshow(win, show)
                 k = cv2.waitKey(0)
                 if k in (ord('q'), 27):
