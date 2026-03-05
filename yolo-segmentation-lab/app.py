@@ -162,6 +162,8 @@ class App(tk.Tk):
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
             'auto_preview_count_var': self.auto_preview_count_var,
             'synth_place_rect_var': self.synth_place_rect_var,
+            'synth_bg_video_var': self.synth_bg_video_var,
+            'synth_bg_extract_n_var': self.synth_bg_extract_n_var,
             'model_var': self.model_var,
             'epochs_var': self.epochs_var,
             'imgsz_var': self.imgsz_var,
@@ -619,6 +621,8 @@ class App(tk.Tk):
         self.synth_preview_count_var = tk.StringVar(value='12')
         self.synth_run_var = tk.StringVar(value='')
         self.synth_place_rect_var = tk.StringVar(value='')
+        self.synth_bg_video_var = tk.StringVar(value='')
+        self.synth_bg_extract_n_var = tk.StringVar(value='120')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -633,11 +637,18 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_bg_dir).grid(row=2, column=2)
 
-        ttk.Label(frm, text='Num synthetic images').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_n_var).grid(row=3, column=1, sticky='we')
+        ttk.Label(frm, text='Extract bg frames from video').grid(row=3, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_bg_video_var, width=70).grid(row=3, column=1, sticky='we')
+        ttk.Button(frm, text='Browse video', command=self.pick_synth_bg_video).grid(row=3, column=2)
+        ttk.Label(frm, text='Frames').grid(row=3, column=1, padx=(520,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_bg_extract_n_var, width=8).grid(row=3, column=2, padx=(80,0), sticky='w')
+        ttk.Button(frm, text='Extract to bg folder', command=self.extract_synth_bg_frames).grid(row=3, column=2, padx=(160,0), sticky='w')
 
-        ttk.Label(frm, text='Min scale').grid(row=4, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_min_scale_var).grid(row=4, column=1, sticky='we')
+        ttk.Label(frm, text='Num synthetic images').grid(row=4, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_n_var).grid(row=4, column=1, sticky='we')
+
+        ttk.Label(frm, text='Min scale').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_min_scale_var).grid(row=5, column=1, sticky='we')
 
         ttk.Label(frm, text='Max scale').grid(row=5, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_max_scale_var).grid(row=5, column=1, sticky='we')
@@ -1444,6 +1455,27 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title='Select background images folder')
         if p:
             self.bg_dir_var.set(p)
+
+    def pick_synth_bg_video(self):
+        p = filedialog.askopenfilename(title='Select video to extract background frames from')
+        if p:
+            self.synth_bg_video_var.set(p)
+
+    def extract_synth_bg_frames(self):
+        if not (self.synth_bg_video_var.get() or '').strip():
+            self.log_line('Select a source video for background extraction first.')
+            return
+        if not (self.bg_dir_var.get() or '').strip():
+            self.log_line('Select background images folder first.')
+            return
+        cmd = [
+            str(PY), 'scripts/extract_bg_frames_from_video.py',
+            '--video', self.synth_bg_video_var.get().strip(),
+            '--out-dir', self.bg_dir_var.get().strip(),
+            '--num-frames', self.synth_bg_extract_n_var.get().strip() or '120',
+            '--prefix', 'bg',
+        ]
+        self.run_cmd(cmd)
 
     def pick_synth_placement_rect(self):
         bg_dir = (self.bg_dir_var.get() or '').strip()
