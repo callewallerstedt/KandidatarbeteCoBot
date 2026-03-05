@@ -155,7 +155,7 @@ def main():
 
         while True:
             ok, frame = cap.read()
-            if not ok:
+            if not ok or frame is None:
                 break
 
             if sample_indices is not None:
@@ -167,46 +167,50 @@ def main():
                     local_idx += 1
                     continue
 
-        for a in range(args.aug_per_frame + 1):
-            img = frame if a == 0 else augment(frame)
-            mask = foreground_mask_bgr(img, quality=args.mask_quality, alpha_threshold=args.alpha_threshold)
-            h, w = mask.shape
-            area = float((mask > 0).sum()) / float(h * w)
-            if area < args.min_area_ratio or area > args.max_area_ratio:
-                rejected += 1
-                if (not args.preview_only) and rejected <= 50:
-                    cv2.imwrite(str(reject_dir / f'reject_area_{idx:06d}_{a}.jpg'), img)
-                continue
+            for a in range(args.aug_per_frame + 1):
+                img = frame if a == 0 else augment(frame)
+                if img is None or img.size == 0:
+                    continue
+                mask = foreground_mask_bgr(img, quality=args.mask_quality, alpha_threshold=args.alpha_threshold)
+                h, w = mask.shape
+                area = float((mask > 0).sum()) / float(h * w)
+                if area < args.min_area_ratio or area > args.max_area_ratio:
+                    rejected += 1
+                    if (not args.preview_only) and rejected <= 50:
+                        cv2.imwrite(str(reject_dir / f'reject_area_{idx:06d}_{a}.jpg'), img)
+                    continue
 
-            poly = mask_to_polygon(mask, eps=args.poly_eps)
-            if poly is None:
-                rejected += 1
-                if (not args.preview_only) and rejected <= 50:
-                    cv2.imwrite(str(reject_dir / f'reject_poly_{idx:06d}_{a}.jpg'), img)
-                continue
+                poly = mask_to_polygon(mask, eps=args.poly_eps)
+                if poly is None:
+                    rejected += 1
+                    if (not args.preview_only) and rejected <= 50:
+                        cv2.imwrite(str(reject_dir / f'reject_poly_{idx:06d}_{a}.jpg'), img)
+                    continue
 
-            kept += 1
-            stem = f"{args.class_name}_{kept:06d}"
-            imp = images_dir / f"{stem}.jpg"
-            lbp = labels_dir / f"{stem}.txt"
-            vsp = overlay_dir / f"{stem}_overlay.jpg"
-            msp = mask_dir / f"{stem}_mask.png"
+                kept += 1
+                stem = f"{args.class_name}_{kept:06d}"
+                imp = images_dir / f"{stem}.jpg"
+                lbp = labels_dir / f"{stem}.txt"
+                vsp = overlay_dir / f"{stem}_overlay.jpg"
+                msp = mask_dir / f"{stem}_mask.png"
 
-            overlay = img.copy()
-            cv2.drawContours(overlay, [poly.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+                overlay = img.copy()
+                cv2.drawContours(overlay, [poly.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
 
-            if args.preview_only:
-                previews.append(overlay)
-            else:
-                cv2.imwrite(str(vsp), overlay)
-                cv2.imwrite(str(msp), mask)
-                cv2.imwrite(str(imp), img)
-                write_yolo_seg(lbp, args.class_id, poly, w, h)
+                if args.preview_only:
+                    previews.append(overlay)
+                else:
+                    cv2.imwrite(str(vsp), overlay)
+                    cv2.imwrite(str(msp), mask)
+                    cv2.imwrite(str(imp), img)
+                    write_yolo_seg(lbp, args.class_id, poly, w, h)
 
-            if kept >= target_kept:
-                break
+                if kept >= target_kept:
+                    break
 
             local_idx += 1
+            if kept >= target_kept:
+                break
 
         cap.release()
         if kept >= target_kept:
