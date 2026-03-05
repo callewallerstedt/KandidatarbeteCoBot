@@ -31,12 +31,16 @@ python lcc_to_ply_gui.py
 ```
 
 In GUI:
-1. Select `.lcc` input
-2. Select `.ply` output
-3. Click **Convert LCC → PLY**
-4. Watch live log/progress
+1. **LCC → PLY tab**: select `.lcc` input + `.ply` output, click convert
+2. **PLY → Mesh tab**: select `.ply` input + mesh output (`.ply`/`.obj`), tune Poisson params, click convert
+3. Watch live log/progress
 
-> GUI uses `npx @playcanvas/splat-transform ...` internally.
+> GUI uses `npx @playcanvas/splat-transform ...` for LCC conversion.
+> GUI uses `python ply_to_mesh_open3d.py ...` for meshing, so install Open3D first:
+>
+> ```powershell
+> pip install open3d numpy
+> ```
 
 ## Convert LCC -> outputs
 
