@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import random
 from datetime import datetime
 from pathlib import Path
@@ -49,16 +50,17 @@ def write_yolo(label_path: Path, class_id: int, poly: np.ndarray, w: int, h: int
 
 
 def pick_random_background(bg_files, max_dim=1920):
-    bg = cv2.imread(str(random.choice(bg_files)))
+    bg_path = random.choice(bg_files)
+    bg = cv2.imread(str(bg_path))
     if bg is None:
-        return np.full((1080, 1920, 3), 127, dtype=np.uint8)
+        return np.full((1080, 1920, 3), 127, dtype=np.uint8), None
     bh, bw = bg.shape[:2]
     # Keep original background proportions; only downscale very large images.
     md = max(bw, bh)
     if md > max_dim:
         s = max_dim / float(md)
         bg = cv2.resize(bg, (max(1, int(bw * s)), max(1, int(bh * s))), interpolation=cv2.INTER_AREA)
-    return bg.copy()
+    return bg.copy(), bg_path
 
 
 def rotate_bound_pair(img, mask, angle):
@@ -99,6 +101,22 @@ def parse_rect_norm(rect_text):
         return None
 
 
+def profile_for_bg(args, bg_path):
+    if bg_path is None:
+        return None
+    prof = getattr(args, 'placement_profile_data', None)
+    if not prof:
+        return None
+    items = prof.get('items', {})
+    k1 = bg_path.name
+    if k1 in items:
+        return items[k1]
+    k2 = str(bg_path).replace('\\', '/')
+    if k2 in items:
+        return items[k2]
+    return None
+
+
 def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fixed_obj_beta=None):
     im_path, lb_path = random.choice(pairs)
     src = cv2.imread(str(im_path))
@@ -114,10 +132,16 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     crop = src[y:y + bh, x:x + bw]
     crop_mask = mask[y:y + bh, x:x + bw]
 
-    bg = pick_random_background(bg_files)
+    bg, bg_path = pick_random_background(bg_files)
     h, w = bg.shape[:2]
 
-    scale = fixed_scale if fixed_scale is not None else random.uniform(args.min_scale, args.max_scale)
+    prof = profile_for_bg(args, bg_path)
+    p_min_scale = prof.get('min_scale') if prof else None
+    p_max_scale = prof.get('max_scale') if prof else None
+    smin = p_min_scale if p_min_scale is not None else args.min_scale
+    smax = p_max_scale if p_max_scale is not None else args.max_scale
+
+    scale = fixed_scale if fixed_scale is not None else random.uniform(min(smin, smax), max(smin, smax))
     angle = random.uniform(-args.max_rotation, args.max_rotation)
     tw = max(8, int(bw * scale))
     th = max(8, int(bh * scale))
@@ -138,8 +162,15 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     if ow >= w or oh >= h:
         return None
 
-    if args.placement_rect_norm is not None:
-        rx1, ry1, rx2, ry2 = args.placement_rect_norm
+    rect_norm = args.placement_rect_norm
+    if prof and isinstance(prof.get('rect'), (list, tuple)) and len(prof.get('rect')) == 4:
+        try:
+            rect_norm = tuple(float(x) for x in prof.get('rect'))
+        except Exception:
+            pass
+
+    if rect_norm is not None:
+        rx1, ry1, rx2, ry2 = rect_norm
         bx1 = int(rx1 * w)
         by1 = int(ry1 * h)
         bx2 = int(rx2 * w)
@@ -202,10 +233,19 @@ def main():
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
     ap.add_argument('--preview-count', type=int, default=12, help='How many random previews to generate in preview-only mode')
     ap.add_argument('--placement-rect', default='', help='Normalized placement rectangle x1,y1,x2,y2 (0..1), objects stay within this box')
+    ap.add_argument('--placement-profile', default='', help='JSON profile with per-background rect/min_scale/max_scale')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
     args.placement_rect_norm = parse_rect_norm(args.placement_rect)
+    args.placement_profile_data = None
+    if args.placement_profile.strip():
+        p = Path(args.placement_profile)
+        if p.exists():
+            try:
+                args.placement_profile_data = json.loads(p.read_text(encoding='utf-8'))
+            except Exception as e:
+                print(f'Warning: failed reading placement profile: {e}')
 
     random.seed(args.seed)
     np.random.seed(args.seed)

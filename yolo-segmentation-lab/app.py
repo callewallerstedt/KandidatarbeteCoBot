@@ -162,6 +162,7 @@ class App(tk.Tk):
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
             'auto_preview_count_var': self.auto_preview_count_var,
             'synth_place_rect_var': self.synth_place_rect_var,
+            'synth_place_profile_var': self.synth_place_profile_var,
             'synth_bg_video_var': self.synth_bg_video_var,
             'synth_bg_extract_n_var': self.synth_bg_extract_n_var,
             'model_var': self.model_var,
@@ -621,6 +622,7 @@ class App(tk.Tk):
         self.synth_preview_count_var = tk.StringVar(value='12')
         self.synth_run_var = tk.StringVar(value='')
         self.synth_place_rect_var = tk.StringVar(value='')
+        self.synth_place_profile_var = tk.StringVar(value='')
         self.synth_bg_video_var = tk.StringVar(value='')
         self.synth_bg_extract_n_var = tk.StringVar(value='120')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
@@ -678,8 +680,13 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=13, column=1, sticky='w')
         ttk.Button(frm, text='Draw rect from bg image', command=self.pick_synth_placement_rect).grid(row=13, column=2, sticky='w')
 
-        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=14, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=14, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Per-bg profile JSON (optional)').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_place_profile_var, width=50).grid(row=14, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_synth_profile).grid(row=14, column=2, sticky='w')
+        ttk.Button(frm, text='Edit profile', command=self.edit_synth_profile).grid(row=14, column=2, padx=(70,0), sticky='w')
+
+        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=15, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=15, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_multi_tab(self):
@@ -1461,6 +1468,26 @@ class App(tk.Tk):
         if p:
             self.synth_bg_video_var.set(p)
 
+    def pick_synth_profile(self):
+        p = filedialog.askopenfilename(title='Select per-background placement profile JSON', filetypes=[('JSON', '*.json'), ('All files', '*.*')])
+        if p:
+            self.synth_place_profile_var.set(p)
+
+    def edit_synth_profile(self):
+        if not (self.bg_dir_var.get() or '').strip():
+            self.log_line('Select background folder first.')
+            return
+        prof = (self.synth_place_profile_var.get() or '').strip()
+        if not prof:
+            prof = str(Path(self.bg_dir_var.get().strip()) / 'placement_profile.json')
+            self.synth_place_profile_var.set(prof)
+        cmd = [
+            str(PY), 'scripts/edit_bg_placement_profile.py',
+            '--bg-dir', self.bg_dir_var.get().strip(),
+            '--profile', prof,
+        ]
+        self.run_cmd(cmd)
+
     def extract_synth_bg_frames(self):
         if not (self.synth_bg_video_var.get() or '').strip():
             self.log_line('Select a source video for background extraction first.')
@@ -1757,6 +1784,8 @@ class App(tk.Tk):
         ]
         if self.synth_place_rect_var.get().strip():
             cmd.extend(['--placement-rect', self.synth_place_rect_var.get().strip()])
+        if self.synth_place_profile_var.get().strip():
+            cmd.extend(['--placement-profile', self.synth_place_profile_var.get().strip()])
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         return cmd
