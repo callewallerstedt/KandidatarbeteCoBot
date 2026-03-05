@@ -20,6 +20,24 @@ npm install -g @playcanvas/splat-transform
 splat-transform --version
 ```
 
+## GUI (Windows-friendly)
+
+Double-click:
+- `00_RUN_LCC_GUI.bat`
+
+Or run manually:
+```powershell
+python lcc_to_ply_gui.py
+```
+
+In GUI:
+1. Select `.lcc` input
+2. Select `.ply` output
+3. Click **Convert LCC → PLY**
+4. Watch live log/progress
+
+> GUI uses `npx @playcanvas/splat-transform ...` internally.
+
 ## Convert LCC -> outputs
 
 ### 1) LCC -> standalone HTML viewer (quick sanity check)
