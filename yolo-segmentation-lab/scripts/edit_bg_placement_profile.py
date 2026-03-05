@@ -2,8 +2,12 @@
 import argparse
 import json
 from pathlib import Path
+from queue import Queue, Empty
+import threading
 import cv2
 import numpy as np
+import tkinter as tk
+from tkinter import ttk
 
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
 
@@ -16,10 +20,41 @@ def fit(img, max_w=1600, max_h=900):
     return img.copy(), 1.0
 
 
+def launch_control_panel(cmd_q):
+    root = tk.Tk()
+    root.title('BG Profile Controls')
+    root.geometry('320x280')
+
+    frm = ttk.Frame(root, padding=10)
+    frm.pack(fill='both', expand=True)
+
+    def push(c):
+        cmd_q.put(c)
+
+    ttk.Button(frm, text='Prev (p)', command=lambda: push('prev')).grid(row=0, column=0, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Next (n)', command=lambda: push('next')).grid(row=0, column=1, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Draw Polygon (r)', command=lambda: push('draw')).grid(row=1, column=0, columnspan=2, sticky='we', padx=4, pady=4)
+
+    ttk.Button(frm, text='Min - ([)', command=lambda: push('min-')).grid(row=2, column=0, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Min + (])', command=lambda: push('min+')).grid(row=2, column=1, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Max - (-)', command=lambda: push('max-')).grid(row=3, column=0, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Max + (=)', command=lambda: push('max+')).grid(row=3, column=1, sticky='we', padx=4, pady=4)
+
+    ttk.Button(frm, text='Save (s)', command=lambda: push('save')).grid(row=4, column=0, sticky='we', padx=4, pady=4)
+    ttk.Button(frm, text='Quit (q)', command=lambda: push('quit')).grid(row=4, column=1, sticky='we', padx=4, pady=4)
+
+    ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=5, column=0, columnspan=2, sticky='w', padx=4, pady=8)
+
+    frm.columnconfigure(0, weight=1)
+    frm.columnconfigure(1, weight=1)
+    root.mainloop()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bg-dir', required=True)
     ap.add_argument('--profile', required=True)
+    ap.add_argument('--control-window', action='store_true', help='Open a small Tk control window with clickable buttons')
     args = ap.parse_args()
 
     bg_dir = Path(args.bg_dir)
@@ -41,6 +76,11 @@ def main():
         profile_path.parent.mkdir(parents=True, exist_ok=True)
         profile_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
         print(f'Auto-saved profile: {profile_path}')
+
+    cmd_q = Queue()
+    if args.control_window:
+        th = threading.Thread(target=launch_control_panel, args=(cmd_q,), daemon=True)
+        th.start()
 
     idx = 0
     while True:
@@ -67,17 +107,24 @@ def main():
         cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
         cv2.imshow('BG Placement Profile Editor', disp)
-        k = cv2.waitKey(0) & 0xFF
 
-        if k in (ord('q'), 27):
+        # Non-blocking key read to support optional control window queue.
+        k = cv2.waitKey(50) & 0xFF
+        cmd = None
+        try:
+            cmd = cmd_q.get_nowait()
+        except Empty:
+            pass
+
+        if cmd == 'quit' or k in (ord('q'), 27):
             break
-        if k == ord('n'):
+        if cmd == 'next' or k == ord('n'):
             idx = min(len(files)-1, idx + 1)
             continue
-        if k == ord('p'):
+        if cmd == 'prev' or k == ord('p'):
             idx = max(0, idx - 1)
             continue
-        if k == ord('r'):
+        if cmd == 'draw' or k == ord('r'):
             sel_img, s2 = fit(img)
             points = []
             done = {'v': False}
@@ -121,7 +168,7 @@ def main():
                 save_now()
             cv2.setMouseCallback('BG Placement Profile Editor', lambda *a: None)
             continue
-        if k == ord('['):
+        if cmd == 'min-' or k == ord('['):
             item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
             data['items'][key] = item
             save_now()
@@ -131,17 +178,17 @@ def main():
             data['items'][key] = item
             save_now()
             continue
-        if k == ord('-'):
+        if cmd == 'max-' or k == ord('-'):
             item['max_scale'] = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if k == ord('='):
+        if cmd == 'max+' or k == ord('='):
             item['max_scale'] = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if k == ord('s'):
+        if cmd == 'save' or k == ord('s'):
             save_now()
             continue
 

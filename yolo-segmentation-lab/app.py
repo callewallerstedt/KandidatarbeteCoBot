@@ -1493,6 +1493,7 @@ class App(tk.Tk):
             str(PY), 'scripts/edit_bg_placement_profile.py',
             '--bg-dir', self.bg_dir_var.get().strip(),
             '--profile', prof,
+            '--control-window',
         ]
         self.run_cmd(cmd)
 
