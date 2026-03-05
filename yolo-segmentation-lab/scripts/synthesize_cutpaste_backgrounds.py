@@ -264,6 +264,8 @@ def main():
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
     ap.add_argument('--preview-count', type=int, default=12, help='How many random previews to generate in preview-only mode')
+    ap.add_argument('--preview-max-width', type=int, default=1600)
+    ap.add_argument('--preview-max-height', type=int, default=900)
     ap.add_argument('--placement-rect', default='', help='Normalized placement rectangle x1,y1,x2,y2 (0..1), objects stay within this box')
     ap.add_argument('--placement-profile', default='', help='JSON profile with per-background rect/min_scale/max_scale')
     ap.add_argument('--seed', type=int, default=42)
@@ -328,7 +330,8 @@ def main():
             vis = sample['image'].copy()
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
             cv2.putText(vis, f'preview {i+1}/{max(1,args.preview_count)} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(vis, f'bg_beta={sample["bg_beta"]:.1f} obj_beta={sample["obj_beta"]:.1f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'scale range={args.min_scale:.2f}..{args.max_scale:.2f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'bg beta={args.brightness_min:.0f}..{args.brightness_max:.0f} obj beta={args.object_brightness_min:.0f}..{args.object_brightness_max:.0f}', (12, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2, cv2.LINE_AA)
             if args.placement_rect_norm is not None:
                 x1, y1, x2, y2 = args.placement_rect_norm
                 hh, ww = vis.shape[:2]
@@ -346,7 +349,11 @@ def main():
             cv2.namedWindow(win, cv2.WINDOW_NORMAL)
             while True:
                 show = previews[idx].copy()
-                cv2.putText(show, f'{idx+1}/{len(previews)}', (12, 86), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(show, f'{idx+1}/{len(previews)}', (12, 112), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                h0, w0 = show.shape[:2]
+                s = min(args.preview_max_width / max(1, w0), args.preview_max_height / max(1, h0), 1.0)
+                if s < 1.0:
+                    show = cv2.resize(show, (int(w0 * s), int(h0 * s)), interpolation=cv2.INTER_AREA)
                 cv2.imshow(win, show)
                 k = cv2.waitKey(0)
                 if k in (ord('q'), 27):
