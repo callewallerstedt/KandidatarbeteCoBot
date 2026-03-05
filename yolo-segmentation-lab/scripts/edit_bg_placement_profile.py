@@ -3,6 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import cv2
+import numpy as np
 
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
 
@@ -49,9 +50,13 @@ def main():
 
         disp, s = fit(img)
         h, w = disp.shape[:2]
-        rx1, ry1, rx2, ry2 = item['rect']
-        x1, y1, x2, y2 = int(rx1 * w), int(ry1 * h), int(rx2 * w), int(ry2 * h)
-        cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 255), 2)
+        if isinstance(item.get('poly'), list) and len(item.get('poly')) >= 3:
+            poly = np.array([[int(p[0] * w), int(p[1] * h)] for p in item['poly']], dtype=np.int32)
+            cv2.polylines(disp, [poly.reshape(-1, 1, 2)], True, (0, 255, 255), 2, cv2.LINE_AA)
+        else:
+            rx1, ry1, rx2, ry2 = item['rect']
+            x1, y1, x2, y2 = int(rx1 * w), int(ry1 * h), int(rx2 * w), int(ry2 * h)
+            cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 255), 2)
         txt = f'{idx+1}/{len(files)} {fp.name}  min={item.get("min_scale",0.55):.2f} max={item.get("max_scale",1.25):.2f}'
         cv2.putText(disp, txt, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2, cv2.LINE_AA)
         cv2.putText(disp, 'n/p next-prev | r draw rect | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
@@ -69,16 +74,46 @@ def main():
             continue
         if k == ord('r'):
             sel_img, s2 = fit(img)
-            x, y, ww, hh = cv2.selectROI('BG Placement Profile Editor', sel_img, fromCenter=False, showCrosshair=True)
-            if ww > 1 and hh > 1:
-                ih, iw = img.shape[:2]
-                # ROI was on fitted image
-                fx1 = (x / max(1, sel_img.shape[1]))
-                fy1 = (y / max(1, sel_img.shape[0]))
-                fx2 = ((x + ww) / max(1, sel_img.shape[1]))
-                fy2 = ((y + hh) / max(1, sel_img.shape[0]))
-                item['rect'] = [round(float(fx1), 4), round(float(fy1), 4), round(float(fx2), 4), round(float(fy2), 4)]
+            points = []
+            done = {'v': False}
+
+            def on_mouse(evt, x, y, flags, param):
+                if evt == cv2.EVENT_LBUTTONDOWN:
+                    points.append((x, y))
+                elif evt == cv2.EVENT_RBUTTONDOWN:
+                    done['v'] = True
+
+            cv2.setMouseCallback('BG Placement Profile Editor', on_mouse)
+            while True:
+                disp2 = sel_img.copy()
+                if len(points) > 0:
+                    for p in points:
+                        cv2.circle(disp2, p, 3, (0, 255, 255), -1)
+                    for i2 in range(1, len(points)):
+                        cv2.line(disp2, points[i2 - 1], points[i2], (0, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(disp2, 'Left click: add corner, Right click/Enter: finish polygon, c: cancel', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
+                cv2.imshow('BG Placement Profile Editor', disp2)
+                kk = cv2.waitKey(20) & 0xFF
+                if kk in (13, 10):
+                    done['v'] = True
+                if kk == ord('c'):
+                    points = []
+                    break
+                if done['v']:
+                    break
+
+            if len(points) >= 3:
+                ph, pw = sel_img.shape[:2]
+                poly = []
+                for x, y in points:
+                    poly.append([round(float(x / max(1, pw)), 4), round(float(y / max(1, ph)), 4)])
+                item['poly'] = poly
+                # keep a compatible rect bbox too
+                xs = [p[0] for p in poly]
+                ys = [p[1] for p in poly]
+                item['rect'] = [min(xs), min(ys), max(xs), max(ys)]
                 data['items'][key] = item
+            cv2.setMouseCallback('BG Placement Profile Editor', lambda *a: None)
             continue
         if k == ord('['):
             item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)

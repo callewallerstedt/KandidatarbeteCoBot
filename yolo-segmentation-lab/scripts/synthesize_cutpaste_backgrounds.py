@@ -101,6 +101,13 @@ def parse_rect_norm(rect_text):
         return None
 
 
+def point_in_poly(x, y, poly_pts):
+    if poly_pts is None or len(poly_pts) < 3:
+        return True
+    contour = np.array(poly_pts, dtype=np.int32).reshape(-1, 1, 2)
+    return cv2.pointPolygonTest(contour, (float(x), float(y)), False) >= 0
+
+
 def profile_for_bg(args, bg_path):
     if bg_path is None:
         return None
@@ -163,13 +170,38 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
         return None
 
     rect_norm = args.placement_rect_norm
-    if prof and isinstance(prof.get('rect'), (list, tuple)) and len(prof.get('rect')) == 4:
-        try:
-            rect_norm = tuple(float(x) for x in prof.get('rect'))
-        except Exception:
-            pass
+    poly_norm = None
+    if prof:
+        if isinstance(prof.get('rect'), (list, tuple)) and len(prof.get('rect')) == 4:
+            try:
+                rect_norm = tuple(float(x) for x in prof.get('rect'))
+            except Exception:
+                pass
+        if isinstance(prof.get('poly'), list) and len(prof.get('poly')) >= 3:
+            try:
+                poly_norm = [(float(p[0]), float(p[1])) for p in prof.get('poly') if isinstance(p, (list, tuple)) and len(p) >= 2]
+            except Exception:
+                poly_norm = None
 
-    if rect_norm is not None:
+    if poly_norm and len(poly_norm) >= 3:
+        poly_px = [(int(x * w), int(y * h)) for x, y in poly_norm]
+        xs = [p[0] for p in poly_px]
+        ys = [p[1] for p in poly_px]
+        min_px = max(0, min(xs))
+        min_py = max(0, min(ys))
+        max_px = min(w - ow, max(xs))
+        max_py = min(h - oh, max(ys))
+        px = random.randint(0, w - ow)
+        py = random.randint(0, h - oh)
+        for _ in range(60):
+            tx = random.randint(min_px, max_px) if max_px >= min_px else px
+            ty = random.randint(min_py, max_py) if max_py >= min_py else py
+            cx = tx + ow * 0.5
+            cy = ty + oh * 0.5
+            if point_in_poly(cx, cy, poly_px):
+                px, py = tx, ty
+                break
+    elif rect_norm is not None:
         rx1, ry1, rx2, ry2 = rect_norm
         bx1 = int(rx1 * w)
         by1 = int(ry1 * h)
