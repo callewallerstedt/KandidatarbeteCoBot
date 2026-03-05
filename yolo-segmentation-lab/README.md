@@ -31,6 +31,7 @@ py -3.11 -m venv .venv
 - When generating labels/data from the GUI, the class is auto-registered into `dataset.yaml` (no manual class-list edit required)
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time
 - Synthetic BG (cut-paste augmentation from your background folder, with browsable preview samples via left/right)
+- Synthetic BG supports optional placement rectangle constraint (draw ROI on a background image so objects randomize only inside that box).
 - Multi-Instance Synth (clustered same-class objects, touching/overlap behavior with max-overlap cap, with browsable preview samples)
 - COMBO RUN (run Synthetic BG + Multi-Instance + Obstruction in one go, with per-mode settings, enable toggles, per-section preview browsers, and obstruction min/max overlap+scale controls)
 - App layout now uses a scrollable top tool area so controls do not get hidden behind the log console.

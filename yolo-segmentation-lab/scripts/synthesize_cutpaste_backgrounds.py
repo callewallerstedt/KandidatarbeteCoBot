@@ -80,6 +80,25 @@ def rotate_bound_pair(img, mask, angle):
     return rot_img, rot_mask
 
 
+def parse_rect_norm(rect_text):
+    if not rect_text:
+        return None
+    try:
+        vals = [float(x.strip()) for x in rect_text.split(',')]
+        if len(vals) != 4:
+            return None
+        x1, y1, x2, y2 = vals
+        x1, x2 = min(x1, x2), max(x1, x2)
+        y1, y2 = min(y1, y2), max(y1, y2)
+        x1 = max(0.0, min(1.0, x1)); x2 = max(0.0, min(1.0, x2))
+        y1 = max(0.0, min(1.0, y1)); y2 = max(0.0, min(1.0, y2))
+        if x2 - x1 < 0.01 or y2 - y1 < 0.01:
+            return None
+        return (x1, y1, x2, y2)
+    except Exception:
+        return None
+
+
 def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fixed_obj_beta=None):
     im_path, lb_path = random.choice(pairs)
     src = cv2.imread(str(im_path))
@@ -119,8 +138,21 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     if ow >= w or oh >= h:
         return None
 
-    px = random.randint(0, w - ow)
-    py = random.randint(0, h - oh)
+    if args.placement_rect_norm is not None:
+        rx1, ry1, rx2, ry2 = args.placement_rect_norm
+        bx1 = int(rx1 * w)
+        by1 = int(ry1 * h)
+        bx2 = int(rx2 * w)
+        by2 = int(ry2 * h)
+        max_px = max(bx1, bx2 - ow)
+        max_py = max(by1, by2 - oh)
+        min_px = min(bx1, max_px)
+        min_py = min(by1, max_py)
+        px = random.randint(min_px, max_px) if max_px >= min_px else random.randint(0, w - ow)
+        py = random.randint(min_py, max_py) if max_py >= min_py else random.randint(0, h - oh)
+    else:
+        px = random.randint(0, w - ow)
+        py = random.randint(0, h - oh)
 
     obj_beta = fixed_obj_beta if fixed_obj_beta is not None else random.uniform(args.object_brightness_min, args.object_brightness_max)
     crop_rr = cv2.convertScaleAbs(crop_rr, alpha=1.0, beta=obj_beta)
@@ -169,8 +201,11 @@ def main():
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
     ap.add_argument('--preview-count', type=int, default=12, help='How many random previews to generate in preview-only mode')
+    ap.add_argument('--placement-rect', default='', help='Normalized placement rectangle x1,y1,x2,y2 (0..1), objects stay within this box')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
+
+    args.placement_rect_norm = parse_rect_norm(args.placement_rect)
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -222,6 +257,10 @@ def main():
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
             cv2.putText(vis, f'preview {i+1}/{max(1,args.preview_count)} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(vis, f'bg_beta={sample["bg_beta"]:.1f} obj_beta={sample["obj_beta"]:.1f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            if args.placement_rect_norm is not None:
+                x1, y1, x2, y2 = args.placement_rect_norm
+                hh, ww = vis.shape[:2]
+                cv2.rectangle(vis, (int(x1*ww), int(y1*hh)), (int(x2*ww), int(y2*hh)), (0, 255, 255), 2, cv2.LINE_AA)
             previews.append(vis)
             cv2.imwrite(str(out_viz_dir / f'preview_{i+1:03d}.jpg'), vis)
 

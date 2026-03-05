@@ -161,6 +161,7 @@ class App(tk.Tk):
             'auto_poly_eps_var': self.auto_poly_eps_var,
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
             'auto_preview_count_var': self.auto_preview_count_var,
+            'synth_place_rect_var': self.synth_place_rect_var,
             'model_var': self.model_var,
             'epochs_var': self.epochs_var,
             'imgsz_var': self.imgsz_var,
@@ -615,6 +616,7 @@ class App(tk.Tk):
         self.synth_obj_bri_max_var = tk.StringVar(value='10')
         self.synth_preview_count_var = tk.StringVar(value='12')
         self.synth_run_var = tk.StringVar(value='')
+        self.synth_place_rect_var = tk.StringVar(value='')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -659,8 +661,12 @@ class App(tk.Tk):
         ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=12, column=1, sticky='w')
 
-        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=13, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Placement rect x1,y1,x2,y2 (norm)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=13, column=1, sticky='w')
+        ttk.Button(frm, text='Draw rect from bg image', command=self.pick_synth_placement_rect).grid(row=13, column=2, sticky='w')
+
+        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=14, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=14, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_multi_tab(self):
@@ -1424,6 +1430,39 @@ class App(tk.Tk):
         if p:
             self.bg_dir_var.set(p)
 
+    def pick_synth_placement_rect(self):
+        bg_dir = (self.bg_dir_var.get() or '').strip()
+        if not bg_dir:
+            self.log_line('Select background folder first.')
+            return
+        try:
+            exts = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+            files = [p for p in Path(bg_dir).rglob('*') if p.suffix.lower() in exts]
+            if not files:
+                self.log_line('No background image found in folder.')
+                return
+            img = cv2.imread(str(files[0]))
+            if img is None:
+                self.log_line('Failed to open background image for rectangle selection.')
+                return
+            win = 'Select placement rectangle (ENTER=ok, c=cancel)'
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+            x, y, w, h = cv2.selectROI(win, img, showCrosshair=True, fromCenter=False)
+            cv2.destroyWindow(win)
+            if w <= 1 or h <= 1:
+                self.log_line('Placement rectangle cancelled.')
+                return
+            ih, iw = img.shape[:2]
+            x1 = x / max(1, iw)
+            y1 = y / max(1, ih)
+            x2 = (x + w) / max(1, iw)
+            y2 = (y + h) / max(1, ih)
+            rect_txt = f'{x1:.4f},{y1:.4f},{x2:.4f},{y2:.4f}'
+            self.synth_place_rect_var.set(rect_txt)
+            self.log_line(f'Set synth placement rect: {rect_txt}')
+        except Exception as e:
+            self.log_line(f'Failed selecting placement rectangle: {e}')
+
     def pick_unity_dir(self):
         p = filedialog.askdirectory(title='Select Unity export root folder (with RGB/ and MASK/)')
         if p:
@@ -1665,6 +1704,8 @@ class App(tk.Tk):
             '--object-brightness-min', self.synth_obj_bri_min_var.get(),
             '--object-brightness-max', self.synth_obj_bri_max_var.get(),
         ]
+        if self.synth_place_rect_var.get().strip():
+            cmd.extend(['--placement-rect', self.synth_place_rect_var.get().strip()])
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         return cmd
