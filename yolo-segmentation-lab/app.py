@@ -8,6 +8,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog
 from tkinter.scrolledtext import ScrolledText
+import cv2
 import yaml
 
 ROOT = Path(__file__).resolve().parent
