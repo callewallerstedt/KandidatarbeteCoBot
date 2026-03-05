@@ -61,6 +61,17 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1):
 
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close)
+
+    # Sensitivity boost: make threshold visibly affect mask size even on hard alpha edges.
+    if alpha_threshold >= 0:
+        thr = int(alpha_threshold)
+        if thr < 110:
+            it = max(1, int((110 - thr) / 15))
+            mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=it)
+        elif thr > 120:
+            it = max(1, int((thr - 120) / 20))
+            mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=it)
+
     return mask
 
 
@@ -101,9 +112,10 @@ def main():
     if not args.preview_only:
         images_dir.mkdir(parents=True, exist_ok=True)
         labels_dir.mkdir(parents=True, exist_ok=True)
-    overlay_dir.mkdir(parents=True, exist_ok=True)
-    mask_dir.mkdir(parents=True, exist_ok=True)
-    reject_dir.mkdir(parents=True, exist_ok=True)
+    if not args.preview_only:
+        overlay_dir.mkdir(parents=True, exist_ok=True)
+        mask_dir.mkdir(parents=True, exist_ok=True)
+        reject_dir.mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -124,6 +136,7 @@ def main():
     idx = 0
     kept = 0
     rejected = 0
+    previews = []
     target_kept = args.preview_count if args.preview_only else args.max_frames
     while True:
         ok, frame = cap.read()
@@ -146,14 +159,14 @@ def main():
             area = float((mask > 0).sum()) / float(h * w)
             if area < args.min_area_ratio or area > args.max_area_ratio:
                 rejected += 1
-                if rejected <= 50:
+                if (not args.preview_only) and rejected <= 50:
                     cv2.imwrite(str(reject_dir / f'reject_area_{idx:06d}_{a}.jpg'), img)
                 continue
 
             poly = mask_to_polygon(mask, eps=args.poly_eps)
             if poly is None:
                 rejected += 1
-                if rejected <= 50:
+                if (not args.preview_only) and rejected <= 50:
                     cv2.imwrite(str(reject_dir / f'reject_poly_{idx:06d}_{a}.jpg'), img)
                 continue
 
@@ -166,10 +179,12 @@ def main():
 
             overlay = img.copy()
             cv2.drawContours(overlay, [poly.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-            cv2.imwrite(str(vsp), overlay)
-            cv2.imwrite(str(msp), mask)
 
-            if not args.preview_only:
+            if args.preview_only:
+                previews.append(overlay)
+            else:
+                cv2.imwrite(str(vsp), overlay)
+                cv2.imwrite(str(msp), mask)
                 cv2.imwrite(str(imp), img)
                 write_yolo_seg(lbp, args.class_id, poly, w, h)
 
@@ -185,12 +200,30 @@ def main():
     print(f'Autolabel mode: {mode}')
     print(f'Created {kept} samples for class={args.class_name} class_id={args.class_id} component={comp} run={run_name}')
     print(f'Rejected samples: {rejected}')
-    if not args.preview_only:
+    if args.preview_only:
+        if args.preview_count > 0 and previews:
+            win = 'Auto-label Preview (left/right, q to quit)'
+            cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+            i = 0
+            while True:
+                show = previews[i].copy()
+                cv2.putText(show, f'{i+1}/{len(previews)}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+                cv2.imshow(win, show)
+                k = cv2.waitKey(0)
+                if k in (ord('q'), 27):
+                    break
+                if k in (81, 2424832, ord('a')):
+                    i = max(0, i - 1)
+                elif k in (83, 2555904, ord('d')):
+                    i = min(len(previews) - 1, i + 1)
+            cv2.destroyAllWindows()
+        print('Preview-only mode: nothing written to dataset folders.')
+    else:
         print(f'Images: {images_dir}')
         print(f'Labels: {labels_dir}')
-    print(f'Preview overlays: {overlay_dir}')
-    print(f'Preview masks: {mask_dir}')
-    print(f'Rejected previews: {reject_dir}')
+        print(f'Preview overlays: {overlay_dir}')
+        print(f'Preview masks: {mask_dir}')
+        print(f'Rejected previews: {reject_dir}')
 
 
 if __name__ == '__main__':
