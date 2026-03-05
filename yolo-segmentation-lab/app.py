@@ -1493,6 +1493,11 @@ class App(tk.Tk):
             str(PY), 'scripts/edit_bg_placement_profile.py',
             '--bg-dir', self.bg_dir_var.get().strip(),
             '--profile', prof,
+            '--class-name', self.synth_class_var.get().strip(),
+            '--bg-brightness-min', self.synth_bri_min_var.get(),
+            '--bg-brightness-max', self.synth_bri_max_var.get(),
+            '--obj-brightness-min', self.synth_obj_bri_min_var.get(),
+            '--obj-brightness-max', self.synth_obj_bri_max_var.get(),
             '--control-window',
         ]
         self.run_cmd(cmd)
