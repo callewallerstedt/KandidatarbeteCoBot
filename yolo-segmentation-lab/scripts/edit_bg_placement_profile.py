@@ -37,6 +37,11 @@ def main():
         except Exception:
             data = {'items': {}}
 
+    def save_now():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, indent=2), encoding='utf-8')
+        print(f'Auto-saved profile: {p}')
+
     idx = 0
     while True:
         fp = files[idx]
@@ -113,23 +118,28 @@ def main():
                 ys = [p[1] for p in poly]
                 item['rect'] = [min(xs), min(ys), max(xs), max(ys)]
                 data['items'][key] = item
+                save_now()
             cv2.setMouseCallback('BG Placement Profile Editor', lambda *a: None)
             continue
         if k == ord('['):
             item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
             data['items'][key] = item
+            save_now()
             continue
         if k == ord(']'):
             item['min_scale'] = round(min(3.0, float(item.get('min_scale', 0.55)) + 0.05), 3)
             data['items'][key] = item
+            save_now()
             continue
         if k == ord('-'):
             item['max_scale'] = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
             data['items'][key] = item
+            save_now()
             continue
         if k == ord('='):
             item['max_scale'] = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
             data['items'][key] = item
+            save_now()
             continue
         if k == ord('s'):
             p.parent.mkdir(parents=True, exist_ok=True)
