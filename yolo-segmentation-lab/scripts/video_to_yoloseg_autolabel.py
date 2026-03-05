@@ -38,7 +38,7 @@ def augment(img):
     return out
 
 
-def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1):
+def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_threshold=0):
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     out = remove(frame_rgb)
     # rembg can return RGBA
@@ -61,6 +61,17 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1):
 
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_close)
+
+    # Optional background-color suppression: sample border color and remove similar pixels.
+    if bg_color_threshold and bg_color_threshold > 0:
+        hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+        border = np.concatenate([hsv[0, :, :], hsv[-1, :, :], hsv[:, 0, :], hsv[:, -1, :]], axis=0)
+        med = np.median(border, axis=0).astype(np.uint8)
+        tol = int(bg_color_threshold)
+        low = np.array([max(0, int(med[0]) - tol), max(0, int(med[1]) - tol), max(0, int(med[2]) - tol)], dtype=np.uint8)
+        high = np.array([min(179, int(med[0]) + tol), min(255, int(med[1]) + tol), min(255, int(med[2]) + tol)], dtype=np.uint8)
+        bg_like = cv2.inRange(hsv, low, high)
+        mask[bg_like > 0] = 0
 
     # Sensitivity boost: make threshold visibly affect mask size even on hard alpha edges.
     if alpha_threshold >= 0:
@@ -93,6 +104,7 @@ def main():
     ap.add_argument('--mask-quality', choices=['fast', 'high'], default='high')
     ap.add_argument('--poly-eps', type=float, default=0.0008, help='Polygon simplification ratio; smaller = more detail')
     ap.add_argument('--alpha-threshold', type=int, default=-1, help='Alpha threshold for foreground mask (0-255). Lower=more sensitive, higher=stricter.')
+    ap.add_argument('--bg-color-threshold', type=int, default=0, help='HSV tolerance to remove border-like background colors (0=off)')
     ap.add_argument('--preview-only', action='store_true', help='Generate previews only (no train image/label writes)')
     ap.add_argument('--preview-count', type=int, default=16, help='Limit previews when --preview-only is set')
     ap.add_argument('--preview-max-width', type=int, default=1600)
@@ -171,7 +183,7 @@ def main():
                 img = frame if a == 0 else augment(frame)
                 if img is None or img.size == 0:
                     continue
-                mask = foreground_mask_bgr(img, quality=args.mask_quality, alpha_threshold=args.alpha_threshold)
+                mask = foreground_mask_bgr(img, quality=args.mask_quality, alpha_threshold=args.alpha_threshold, bg_color_threshold=args.bg_color_threshold)
                 h, w = mask.shape
                 area = float((mask > 0).sum()) / float(h * w)
                 if area < args.min_area_ratio or area > args.max_area_ratio:

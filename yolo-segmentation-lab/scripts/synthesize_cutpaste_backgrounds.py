@@ -108,6 +108,21 @@ def point_in_poly(x, y, poly_pts):
     return cv2.pointPolygonTest(contour, (float(x), float(y)), False) >= 0
 
 
+def bbox_fully_inside_poly(px, py, ow, oh, poly_pts):
+    if poly_pts is None or len(poly_pts) < 3:
+        return True
+    corners = [
+        (px, py),
+        (px + ow, py),
+        (px, py + oh),
+        (px + ow, py + oh),
+    ]
+    for cx, cy in corners:
+        if not point_in_poly(cx, cy, poly_pts):
+            return False
+    return True
+
+
 def profile_for_bg(args, bg_path):
     if bg_path is None:
         return None
@@ -196,9 +211,7 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
         for _ in range(60):
             tx = random.randint(min_px, max_px) if max_px >= min_px else px
             ty = random.randint(min_py, max_py) if max_py >= min_py else py
-            cx = tx + ow * 0.5
-            cy = ty + oh * 0.5
-            if point_in_poly(cx, cy, poly_px):
+            if bbox_fully_inside_poly(tx, ty, ow, oh, poly_px):
                 px, py = tx, ty
                 break
     elif rect_norm is not None:
@@ -319,25 +332,42 @@ def main():
 
     if args.preview_only:
         previews = []
-        for i in range(max(1, args.preview_count)):
+        specs = [
+            ('min_scale', {'fixed_scale': args.min_scale}),
+            ('max_scale', {'fixed_scale': args.max_scale}),
+            ('min_bg_brightness', {'fixed_bg_beta': args.brightness_min}),
+            ('max_bg_brightness', {'fixed_bg_beta': args.brightness_max}),
+        ]
+
+        for label, kw in specs:
             sample = None
-            for _ in range(20):
-                sample = compose_once(pairs, bg_files, args)
+            for _ in range(30):
+                sample = compose_once(pairs, bg_files, args, **kw)
                 if sample is not None:
                     break
             if sample is None:
                 continue
             vis = sample['image'].copy()
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-            cv2.putText(vis, f'preview {i+1}/{max(1,args.preview_count)} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'{label} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(vis, f'scale range={args.min_scale:.2f}..{args.max_scale:.2f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(vis, f'bg beta={args.brightness_min:.0f}..{args.brightness_max:.0f} obj beta={args.object_brightness_min:.0f}..{args.object_brightness_max:.0f}', (12, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2, cv2.LINE_AA)
-            if args.placement_rect_norm is not None:
-                x1, y1, x2, y2 = args.placement_rect_norm
-                hh, ww = vis.shape[:2]
-                cv2.rectangle(vis, (int(x1*ww), int(y1*hh)), (int(x2*ww), int(y2*hh)), (0, 255, 255), 2, cv2.LINE_AA)
             previews.append(vis)
-            cv2.imwrite(str(out_viz_dir / f'preview_{i+1:03d}.jpg'), vis)
+
+        while len(previews) < max(1, args.preview_count):
+            sample = None
+            for _ in range(20):
+                sample = compose_once(pairs, bg_files, args)
+                if sample is not None:
+                    break
+            if sample is None:
+                break
+            vis = sample['image'].copy()
+            cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
+            cv2.putText(vis, f'random scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'scale range={args.min_scale:.2f}..{args.max_scale:.2f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'bg beta={args.brightness_min:.0f}..{args.brightness_max:.0f} obj beta={args.object_brightness_min:.0f}..{args.object_brightness_max:.0f}', (12, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2, cv2.LINE_AA)
+            previews.append(vis)
 
         if not previews:
             raise RuntimeError('Could not create preview samples with current settings.')

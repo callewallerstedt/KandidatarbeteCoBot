@@ -161,6 +161,7 @@ class App(tk.Tk):
             'auto_max_area_var': self.auto_max_area_var,
             'auto_poly_eps_var': self.auto_poly_eps_var,
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
+            'auto_bg_color_thr_var': self.auto_bg_color_thr_var,
             'auto_preview_count_var': self.auto_preview_count_var,
             'synth_place_rect_var': self.synth_place_rect_var,
             'synth_place_profile_var': self.synth_place_profile_var,
@@ -508,6 +509,7 @@ class App(tk.Tk):
         self.auto_max_area_var = tk.StringVar(value='0.80')
         self.auto_poly_eps_var = tk.StringVar(value='0.0008')
         self.auto_alpha_thr_var = tk.StringVar(value='100')
+        self.auto_bg_color_thr_var = tk.StringVar(value='0')
         self.auto_preview_count_var = tk.StringVar(value='2')
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
@@ -564,6 +566,8 @@ class App(tk.Tk):
 
         ttk.Label(frm, text='BG remover alpha threshold (lower=more sensitive)').grid(row=11, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.auto_alpha_thr_var, width=8).grid(row=11, column=1, sticky='w')
+        ttk.Label(frm, text='BG color tol').grid(row=11, column=1, padx=(90,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_bg_color_thr_var, width=8).grid(row=11, column=2, sticky='w')
 
         ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.auto_preview_count_var, width=8).grid(row=12, column=1, sticky='w')
@@ -1705,6 +1709,7 @@ class App(tk.Tk):
             '--max-area-ratio', self.auto_max_area_var.get(),
             '--poly-eps', self.auto_poly_eps_var.get(),
             '--alpha-threshold', self.auto_alpha_thr_var.get(),
+            '--bg-color-threshold', self.auto_bg_color_thr_var.get(),
         ]
         if src and Path(src).is_dir():
             cmd.extend(['--video-dir', src])
