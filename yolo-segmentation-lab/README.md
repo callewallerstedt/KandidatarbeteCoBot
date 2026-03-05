@@ -26,7 +26,7 @@ py -3.11 -m venv .venv
 ## Main app
 `app.py` has tabs for:
 - Instructions (step-by-step guide for adding classes, adding more data, and safe retraining)
-- Data prep (auto-label from video + Unity import from one export folder containing RGB/ and MASK/ + split mode: all/real/synth/obs/unity + mask quality selector + optional split-class selector + optional run filter)
+- Data prep (auto-label from video with component/run structure, preview-only mode, area/poly controls, and mask+overlay previews + Unity import from one export folder containing RGB/ and MASK/ + split mode: all/real/synth/obs/unity + optional split-class selector + optional run filter)
 - Class IDs are auto-suggested from `dataset.yaml` (reuse existing ID for known class, otherwise pick next free ID)
 - When generating labels/data from the GUI, the class is auto-registered into `dataset.yaml` (no manual class-list edit required)
 - Data Prep also has `Auto-sync dataset.yaml from data folders` to rebuild/repair class list from `data/images/*` at any time

@@ -68,6 +68,8 @@ def main():
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
     ap.add_argument('--out-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
+    ap.add_argument('--component-name', default='main', help='Component/subpart grouping, e.g. head/handle/body')
+    ap.add_argument('--run-name', default='', help='Optional run name. Auto-generated when empty')
     ap.add_argument('--every', type=int, default=8, help='Use every N frames when --num-samples is not set')
     ap.add_argument('--num-samples', type=int, default=0, help='If >0, sample this many frames evenly across the full video')
     ap.add_argument('--max-frames', type=int, default=400)
@@ -76,17 +78,29 @@ def main():
     ap.add_argument('--max-area-ratio', type=float, default=0.80)
     ap.add_argument('--mask-quality', choices=['fast', 'high'], default='high')
     ap.add_argument('--poly-eps', type=float, default=0.0008, help='Polygon simplification ratio; smaller = more detail')
+    ap.add_argument('--preview-only', action='store_true', help='Generate previews only (no train image/label writes)')
+    ap.add_argument('--preview-count', type=int, default=16, help='Limit previews when --preview-only is set')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
     random.seed(args.seed)
     out_root = Path(args.out_root)
-    images_dir = out_root / 'images' / args.class_name
-    labels_dir = out_root / 'labels' / args.class_name
-    viz_dir = out_root / 'staging' / args.class_name
-    images_dir.mkdir(parents=True, exist_ok=True)
-    labels_dir.mkdir(parents=True, exist_ok=True)
-    viz_dir.mkdir(parents=True, exist_ok=True)
+    run_name = args.run_name.strip() or __import__('datetime').datetime.now().strftime('autolabel_%Y%m%d_%H%M%S')
+    comp = args.component_name.strip() or 'main'
+
+    images_dir = out_root / 'images' / args.class_name / 'components' / comp / 'runs' / run_name / 'frames'
+    labels_dir = out_root / 'labels' / args.class_name / 'components' / comp / 'runs' / run_name / 'frames'
+    viz_dir = out_root / 'staging' / args.class_name / 'autolabel' / comp / run_name
+    overlay_dir = viz_dir / 'overlays'
+    mask_dir = viz_dir / 'masks'
+    reject_dir = viz_dir / 'rejected'
+
+    if not args.preview_only:
+        images_dir.mkdir(parents=True, exist_ok=True)
+        labels_dir.mkdir(parents=True, exist_ok=True)
+    overlay_dir.mkdir(parents=True, exist_ok=True)
+    mask_dir.mkdir(parents=True, exist_ok=True)
+    reject_dir.mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -106,6 +120,8 @@ def main():
 
     idx = 0
     kept = 0
+    rejected = 0
+    target_kept = args.preview_count if args.preview_only else args.max_frames
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -126,37 +142,52 @@ def main():
             h, w = mask.shape
             area = float((mask > 0).sum()) / float(h * w)
             if area < args.min_area_ratio or area > args.max_area_ratio:
+                rejected += 1
+                if rejected <= 50:
+                    cv2.imwrite(str(reject_dir / f'reject_area_{idx:06d}_{a}.jpg'), img)
                 continue
 
             poly = mask_to_polygon(mask, eps=args.poly_eps)
             if poly is None:
+                rejected += 1
+                if rejected <= 50:
+                    cv2.imwrite(str(reject_dir / f'reject_poly_{idx:06d}_{a}.jpg'), img)
                 continue
 
             kept += 1
             stem = f"{args.class_name}_{kept:06d}"
             imp = images_dir / f"{stem}.jpg"
             lbp = labels_dir / f"{stem}.txt"
-            vsp = viz_dir / f"{stem}_overlay.jpg"
-
-            cv2.imwrite(str(imp), img)
-            write_yolo_seg(lbp, args.class_id, poly, w, h)
+            vsp = overlay_dir / f"{stem}_overlay.jpg"
+            msp = mask_dir / f"{stem}_mask.png"
 
             overlay = img.copy()
             cv2.drawContours(overlay, [poly.reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
             cv2.imwrite(str(vsp), overlay)
+            cv2.imwrite(str(msp), mask)
 
-            if kept >= args.max_frames:
+            if not args.preview_only:
+                cv2.imwrite(str(imp), img)
+                write_yolo_seg(lbp, args.class_id, poly, w, h)
+
+            if kept >= target_kept:
                 break
 
-        if kept >= args.max_frames:
+        if kept >= target_kept:
             break
         idx += 1
 
     cap.release()
-    print(f'Created {kept} labeled images for class={args.class_name} class_id={args.class_id}')
-    print(f'Images: {images_dir}')
-    print(f'Labels: {labels_dir}')
-    print(f'Overlays: {viz_dir}')
+    mode = 'PREVIEW_ONLY' if args.preview_only else 'WRITE_DATASET'
+    print(f'Autolabel mode: {mode}')
+    print(f'Created {kept} samples for class={args.class_name} class_id={args.class_id} component={comp} run={run_name}')
+    print(f'Rejected samples: {rejected}')
+    if not args.preview_only:
+        print(f'Images: {images_dir}')
+        print(f'Labels: {labels_dir}')
+    print(f'Preview overlays: {overlay_dir}')
+    print(f'Preview masks: {mask_dir}')
+    print(f'Rejected previews: {reject_dir}')
 
 
 if __name__ == '__main__':
