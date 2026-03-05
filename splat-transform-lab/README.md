@@ -39,7 +39,7 @@ In GUI:
 > GUI uses `python ply_to_mesh_open3d.py ...` for meshing, so install Open3D first:
 >
 > ```powershell
-> pip install open3d numpy
+> python -m pip install open3d numpy
 > ```
 
 ## Convert LCC -> outputs

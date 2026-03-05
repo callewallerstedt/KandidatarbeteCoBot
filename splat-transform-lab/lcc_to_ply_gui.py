@@ -122,10 +122,10 @@ class App(tk.Tk):
             self.mesh_in_var.set(p)
             if not self.mesh_out_var.get().strip():
                 base, _ = os.path.splitext(p)
-                self.mesh_out_var.set(base + '_mesh.ply')
+                self.mesh_out_var.set(base + '_mesh.obj')
 
     def pick_mesh_output(self):
-        p = filedialog.asksaveasfilename(title='Select output mesh', defaultextension='.ply', filetypes=[('PLY mesh', '*.ply'), ('OBJ mesh', '*.obj'), ('All files', '*.*')])
+        p = filedialog.asksaveasfilename(title='Select output mesh', defaultextension='.obj', filetypes=[('OBJ mesh', '*.obj'), ('PLY mesh', '*.ply'), ('All files', '*.*')])
         if p:
             self.mesh_out_var.set(p)
 

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 import argparse
+import sys
 import numpy as np
-import open3d as o3d
+
+try:
+    import open3d as o3d
+except ImportError:
+    print('ERROR: open3d is not installed for this Python environment.', flush=True)
+    print(f'Python in use: {sys.executable}', flush=True)
+    print('Install with: python -m pip install open3d numpy', flush=True)
+    raise
 
 
 def main():
