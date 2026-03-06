@@ -199,10 +199,11 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
 
     tk.Button(frm, text='Save (s)', command=lambda: push('save'), bg='#065f46', fg='white', activebackground='#047857').grid(row=4, column=0, sticky='we', padx=4, pady=4)
     tk.Button(frm, text='Quit (q)', command=request_quit, bg='#7f1d1d', fg='white', activebackground='#991b1b').grid(row=4, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Copy current settings → ALL BG', command=lambda: push('copy_all'), bg='#b45309', fg='white', activebackground='#d97706').grid(row=5, column=0, columnspan=2, sticky='we', padx=4, pady=(2,4))
 
-    ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=2, sticky='we', pady=6)
+    ttk.Separator(frm, orient='horizontal').grid(row=6, column=0, columnspan=2, sticky='we', pady=6)
 
-    ttk.Label(frm, text='Current Background').grid(row=6, column=0, columnspan=2, sticky='w', padx=4)
+    ttk.Label(frm, text='Current Background').grid(row=7, column=0, columnspan=2, sticky='w', padx=4)
     current_bg_lbl = ttk.Label(frm, text='-', wraplength=360)
     current_bg_lbl.grid(row=7, column=0, columnspan=2, sticky='w', padx=4)
 
@@ -253,7 +254,7 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
 
     ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=23, column=0, columnspan=2, sticky='w', padx=4, pady=8)
 
-    last_bg = {'name': None}
+    last_bg = {'id': None}
 
     def sync_state():
         if stop_evt is not None and stop_evt.is_set():
@@ -268,25 +269,37 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
                 while True:
                     st = state_q.get_nowait()
                     bg_name = st.get('bg', '-')
+                    bg_id = st.get('bg_id', bg_name)
                     current_bg_lbl.config(text=bg_name)
                     current_min_lbl.config(text=f"min={st.get('min_scale', 0.55):.3f}")
                     current_max_lbl.config(text=f"max={st.get('max_scale', 1.25):.3f}")
                     current_mode_lbl.config(text=f"mode={st.get('mode', 'pv_random')}")
-                    # Only reset entry fields when image changes to avoid "jump back" while typing.
-                    if bg_name != last_bg['name']:
+
+                    focused = root.focus_get()
+                    min_focused = focused is min_entry
+                    max_focused = focused is max_entry
+                    bg_focused = focused in (bg_min_entry, bg_max_entry)
+                    obj_focused = focused in (obj_min_entry, obj_max_entry)
+
+                    # On bg change refresh all fields; otherwise refresh non-focused fields.
+                    if bg_id != last_bg['id'] or not min_focused:
                         min_entry.delete(0, 'end')
                         min_entry.insert(0, f"{st.get('min_scale', 0.55):.3f}")
+                    if bg_id != last_bg['id'] or not max_focused:
                         max_entry.delete(0, 'end')
                         max_entry.insert(0, f"{st.get('max_scale', 1.25):.3f}")
+                    if bg_id != last_bg['id'] or not bg_focused:
                         bg_min_entry.delete(0, 'end')
                         bg_min_entry.insert(0, f"{float(args.bg_brightness_min):.1f}")
                         bg_max_entry.delete(0, 'end')
                         bg_max_entry.insert(0, f"{float(args.bg_brightness_max):.1f}")
+                    if bg_id != last_bg['id'] or not obj_focused:
                         obj_min_entry.delete(0, 'end')
                         obj_min_entry.insert(0, f"{float(args.obj_brightness_min):.1f}")
                         obj_max_entry.delete(0, 'end')
                         obj_max_entry.insert(0, f"{float(args.obj_brightness_max):.1f}")
-                        last_bg['name'] = bg_name
+
+                    last_bg['id'] = bg_id
             except Empty:
                 pass
         root.after(150, sync_state)
@@ -349,8 +362,8 @@ def main():
     idx = 0
     while True:
         fp = files[idx]
-        key = fp.name
-        item = data['items'].get(key, {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25})
+        key = str(fp).replace('\\', '/')
+        item = data['items'].get(key, data['items'].get(fp.name, {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}))
 
         img = cv2.imread(str(fp))
         if img is None:
@@ -376,7 +389,8 @@ def main():
         except Empty:
             pass
         state_q.put({
-            'bg': fp.name,
+            'bg': str(fp.relative_to(bg_dir)).replace('\\', '/'),
+            'bg_id': str(fp).replace('\\', '/'),
             'min_scale': float(item.get('min_scale', 0.55)),
             'max_scale': float(item.get('max_scale', 1.25)),
             'mode': preview_mode,
@@ -421,9 +435,13 @@ def main():
             break
         if cmd_name == 'next' or k == ord('n'):
             idx = min(len(files)-1, idx + 1)
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'prev' or k == ord('p'):
             idx = max(0, idx - 1)
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'draw' or k == ord('r'):
             sel_img, s2 = fit(img)
@@ -473,27 +491,37 @@ def main():
             item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
             data['items'][key] = item
             save_now()
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'min+' or k == ord(']'):
             item['min_scale'] = round(min(3.0, float(item.get('min_scale', 0.55)) + 0.05), 3)
             data['items'][key] = item
             save_now()
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'max-' or k == ord('-'):
             item['max_scale'] = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
             data['items'][key] = item
             save_now()
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'max+' or k == ord('='):
             item['max_scale'] = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
             data['items'][key] = item
             save_now()
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'set_min' and isinstance(cmd, tuple) and len(cmd) > 1:
             try:
                 item['min_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
                 data['items'][key] = item
                 save_now()
+                preview_cache['key'] = None
+                preview_cache['params'] = None
             except Exception:
                 pass
             continue
@@ -526,6 +554,24 @@ def main():
                 preview_cache['params'] = None
             except Exception:
                 pass
+            continue
+        if cmd_name == 'copy_all':
+            template = {
+                'rect': item.get('rect', [0.0, 0.0, 1.0, 1.0]),
+                'min_scale': float(item.get('min_scale', 0.55)),
+                'max_scale': float(item.get('max_scale', 1.25)),
+            }
+            if isinstance(item.get('poly'), list) and len(item.get('poly')) >= 3:
+                template['poly'] = item.get('poly')
+            for fp2 in files:
+                k2 = str(fp2).replace('\\', '/')
+                cur = data['items'].get(k2, data['items'].get(fp2.name, {}))
+                merged = dict(cur)
+                merged.update(template)
+                data['items'][k2] = merged
+            save_now()
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
         if cmd_name == 'save' or k == ord('s'):
             save_now()
