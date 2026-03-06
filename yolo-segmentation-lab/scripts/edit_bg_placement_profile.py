@@ -437,11 +437,41 @@ def main():
             idx = min(len(files)-1, idx + 1)
             preview_cache['key'] = None
             preview_cache['params'] = None
+            try:
+                fp2 = files[idx]
+                k2 = str(fp2).replace('\\', '/')
+                it2 = data['items'].get(k2, data['items'].get(fp2.name, {'min_scale': 0.55, 'max_scale': 1.25}))
+                while True:
+                    state_q.get_nowait()
+            except Empty:
+                pass
+            state_q.put({
+                'bg': str(fp2.relative_to(bg_dir)).replace('\\', '/'),
+                'bg_id': k2,
+                'min_scale': float(it2.get('min_scale', 0.55)),
+                'max_scale': float(it2.get('max_scale', 1.25)),
+                'mode': preview_mode,
+            })
             continue
         if cmd_name == 'prev' or k == ord('p'):
             idx = max(0, idx - 1)
             preview_cache['key'] = None
             preview_cache['params'] = None
+            try:
+                fp2 = files[idx]
+                k2 = str(fp2).replace('\\', '/')
+                it2 = data['items'].get(k2, data['items'].get(fp2.name, {'min_scale': 0.55, 'max_scale': 1.25}))
+                while True:
+                    state_q.get_nowait()
+            except Empty:
+                pass
+            state_q.put({
+                'bg': str(fp2.relative_to(bg_dir)).replace('\\', '/'),
+                'bg_id': k2,
+                'min_scale': float(it2.get('min_scale', 0.55)),
+                'max_scale': float(it2.get('max_scale', 1.25)),
+                'mode': preview_mode,
+            })
             continue
         if cmd_name == 'draw' or k == ord('r'):
             sel_img, s2 = fit(img)
