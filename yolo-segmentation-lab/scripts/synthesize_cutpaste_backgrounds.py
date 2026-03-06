@@ -133,14 +133,24 @@ def profile_for_bg(args, bg_path):
     k1 = bg_path.name
     if k1 in items:
         return items[k1]
-    k2 = str(bg_path).replace('\\', '/')
-    if k2 in items:
-        return items[k2]
+
+    k_abs = str(bg_path).replace('\\', '/')
+    if k_abs in items:
+        return items[k_abs]
+
+    try:
+        k_rel = str(bg_path.relative_to(Path(args.background_dir))).replace('\\', '/')
+        if k_rel in items:
+            return items[k_rel]
+    except Exception:
+        k_rel = None
+
     # Windows/path normalization fallback
-    k2_low = k2.lower()
+    k_abs_low = k_abs.lower()
+    k_rel_low = k_rel.lower() if k_rel else None
     for kk, vv in items.items():
         k_norm = str(kk).replace('\\', '/').lower()
-        if k_norm == k2_low or k_norm.endswith('/' + k1.lower()):
+        if k_norm == k_abs_low or (k_rel_low and (k_norm == k_rel_low or k_norm.endswith('/' + k_rel_low))) or k_norm.endswith('/' + k1.lower()):
             return vv
     return None
 

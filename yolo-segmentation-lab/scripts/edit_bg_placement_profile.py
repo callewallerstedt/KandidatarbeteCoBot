@@ -140,9 +140,33 @@ def parse_yolo_polygon(label_path, w, h):
     return np.round(pts).astype(np.int32)
 
 
-def get_item(data, fp):
-    key = str(fp).replace('\\', '/')
-    return key, data['items'].get(key, data['items'].get(fp.name, {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}))
+def get_item(data, fp, bg_dir=None):
+    key_abs = str(fp).replace('\\', '/')
+    key_name = fp.name
+    key_rel = None
+    if bg_dir is not None:
+        try:
+            key_rel = str(fp.relative_to(bg_dir)).replace('\\', '/')
+        except Exception:
+            key_rel = None
+
+    items = data.get('items', {})
+    if key_rel and key_rel in items:
+        return key_rel, items[key_rel]
+    if key_abs in items:
+        return key_abs, items[key_abs]
+    if key_name in items:
+        return key_name, items[key_name]
+
+    # Fallback by normalized suffix match (legacy absolute-path keys).
+    key_abs_low = key_abs.lower()
+    key_rel_low = key_rel.lower() if key_rel else None
+    for k, v in items.items():
+        kn = str(k).replace('\\', '/').lower()
+        if kn == key_abs_low or (key_rel_low and (kn == key_rel_low or kn.endswith('/' + key_rel_low))):
+            return k, v
+
+    return (key_rel or key_abs), {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}
 
 
 def get_effective_scales(item, class_name: str):
@@ -427,7 +451,7 @@ def main():
     idx = 0
     while True:
         fp = files[idx]
-        key, item_raw = get_item(data, fp)
+        key, item_raw = get_item(data, fp, bg_dir)
         eff_min, eff_max = get_effective_scales(item_raw, scope_class)
         dflt_bri = (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max)
         eff_bg_min, eff_bg_max, eff_obj_min, eff_obj_max = get_effective_brightness(item_raw, scope_class, dflt_bri)
@@ -519,7 +543,7 @@ def main():
             preview_cache['params'] = None
             try:
                 fp2 = files[idx]
-                k2, it2_raw = get_item(data, fp2)
+                k2, it2_raw = get_item(data, fp2, bg_dir)
                 mn2, mx2 = get_effective_scales(it2_raw, scope_class)
                 bmn2, bmx2, omn2, omx2 = get_effective_brightness(it2_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
                 while True:
@@ -544,7 +568,7 @@ def main():
             preview_cache['params'] = None
             try:
                 fp2 = files[idx]
-                k2, it2_raw = get_item(data, fp2)
+                k2, it2_raw = get_item(data, fp2, bg_dir)
                 mn2, mx2 = get_effective_scales(it2_raw, scope_class)
                 bmn2, bmx2, omn2, omx2 = get_effective_brightness(it2_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
                 while True:
@@ -694,7 +718,7 @@ def main():
             src_min = float(item.get('min_scale', 0.55))
             src_max = float(item.get('max_scale', 1.25))
             for fp2 in files:
-                k2, cur = get_item(data, fp2)
+                k2, cur = get_item(data, fp2, bg_dir)
                 cur2 = dict(cur)
                 set_effective_scales(cur2, scope_class, src_min, src_max)
                 data['items'][k2] = cur2
