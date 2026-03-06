@@ -160,6 +160,20 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     prof = profile_for_bg(args, bg_path)
     p_min_scale = prof.get('min_scale') if prof else None
     p_max_scale = prof.get('max_scale') if prof else None
+    p_bg_min = prof.get('bg_brightness_min') if prof else None
+    p_bg_max = prof.get('bg_brightness_max') if prof else None
+    p_obj_min = prof.get('obj_brightness_min') if prof else None
+    p_obj_max = prof.get('obj_brightness_max') if prof else None
+    if prof and args.class_name and isinstance(prof.get('class_settings'), dict):
+        cs = prof['class_settings'].get(args.class_name, {})
+        if isinstance(cs, dict):
+            p_min_scale = cs.get('min_scale', p_min_scale)
+            p_max_scale = cs.get('max_scale', p_max_scale)
+            p_bg_min = cs.get('bg_brightness_min', p_bg_min)
+            p_bg_max = cs.get('bg_brightness_max', p_bg_max)
+            p_obj_min = cs.get('obj_brightness_min', p_obj_min)
+            p_obj_max = cs.get('obj_brightness_max', p_obj_max)
+
     smin = p_min_scale if p_min_scale is not None else args.min_scale
     smax = p_max_scale if p_max_scale is not None else args.max_scale
 
@@ -230,7 +244,9 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
         px = random.randint(0, w - ow)
         py = random.randint(0, h - oh)
 
-    obj_beta = fixed_obj_beta if fixed_obj_beta is not None else random.uniform(args.object_brightness_min, args.object_brightness_max)
+    obj_min = p_obj_min if p_obj_min is not None else args.object_brightness_min
+    obj_max = p_obj_max if p_obj_max is not None else args.object_brightness_max
+    obj_beta = fixed_obj_beta if fixed_obj_beta is not None else random.uniform(obj_min, obj_max)
     crop_rr = cv2.convertScaleAbs(crop_rr, alpha=1.0, beta=obj_beta)
 
     roi = bg[py:py + oh, px:px + ow]
@@ -238,7 +254,9 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     roi[alpha] = crop_rr[alpha]
     bg[py:py + oh, px:px + ow] = roi
 
-    bg_beta = fixed_bg_beta if fixed_bg_beta is not None else random.uniform(args.brightness_min, args.brightness_max)
+    bg_min = p_bg_min if p_bg_min is not None else args.brightness_min
+    bg_max = p_bg_max if p_bg_max is not None else args.brightness_max
+    bg_beta = fixed_bg_beta if fixed_bg_beta is not None else random.uniform(bg_min, bg_max)
     bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
 
     full_mask = np.zeros((h, w), dtype=np.uint8)

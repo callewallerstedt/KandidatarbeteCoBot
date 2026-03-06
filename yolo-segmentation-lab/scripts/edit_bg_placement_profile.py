@@ -170,6 +170,40 @@ def set_effective_scales(item, class_name: str, min_scale: float, max_scale: flo
         item['max_scale'] = float(max_scale)
 
 
+def get_effective_brightness(item, class_name: str, defaults):
+    bg_min = float(item.get('bg_brightness_min', defaults[0]))
+    bg_max = float(item.get('bg_brightness_max', defaults[1]))
+    obj_min = float(item.get('obj_brightness_min', defaults[2]))
+    obj_max = float(item.get('obj_brightness_max', defaults[3]))
+    if class_name and isinstance(item.get('class_settings'), dict):
+        cs = item['class_settings'].get(class_name, {})
+        if isinstance(cs, dict):
+            bg_min = float(cs.get('bg_brightness_min', bg_min))
+            bg_max = float(cs.get('bg_brightness_max', bg_max))
+            obj_min = float(cs.get('obj_brightness_min', obj_min))
+            obj_max = float(cs.get('obj_brightness_max', obj_max))
+    return bg_min, bg_max, obj_min, obj_max
+
+
+def set_effective_brightness(item, class_name: str, bg_min: float, bg_max: float, obj_min: float, obj_max: float):
+    if class_name:
+        cs_all = item.get('class_settings')
+        if not isinstance(cs_all, dict):
+            cs_all = {}
+        cs = cs_all.get(class_name, {}) if isinstance(cs_all.get(class_name, {}), dict) else {}
+        cs['bg_brightness_min'] = float(bg_min)
+        cs['bg_brightness_max'] = float(bg_max)
+        cs['obj_brightness_min'] = float(obj_min)
+        cs['obj_brightness_max'] = float(obj_max)
+        cs_all[class_name] = cs
+        item['class_settings'] = cs_all
+    else:
+        item['bg_brightness_min'] = float(bg_min)
+        item['bg_brightness_max'] = float(bg_max)
+        item['obj_brightness_min'] = float(obj_min)
+        item['obj_brightness_max'] = float(obj_max)
+
+
 def extract_object_sample(data_root: Path, class_name: str):
     img_root = data_root / 'images' / class_name
     lbl_root = data_root / 'labels' / class_name
@@ -395,9 +429,17 @@ def main():
         fp = files[idx]
         key, item_raw = get_item(data, fp)
         eff_min, eff_max = get_effective_scales(item_raw, scope_class)
+        dflt_bri = (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max)
+        eff_bg_min, eff_bg_max, eff_obj_min, eff_obj_max = get_effective_brightness(item_raw, scope_class, dflt_bri)
         item = dict(item_raw)
         item['min_scale'] = eff_min
         item['max_scale'] = eff_max
+
+        # For preview rendering this frame, use effective brightness for current bg+class.
+        args.bg_brightness_min = eff_bg_min
+        args.bg_brightness_max = eff_bg_max
+        args.obj_brightness_min = eff_obj_min
+        args.obj_brightness_max = eff_obj_max
 
         img = cv2.imread(str(fp))
         if img is None:
@@ -428,10 +470,10 @@ def main():
             'min_scale': float(item.get('min_scale', 0.55)),
             'max_scale': float(item.get('max_scale', 1.25)),
             'mode': preview_mode,
-            'bg_bri_min': float(args.bg_brightness_min),
-            'bg_bri_max': float(args.bg_brightness_max),
-            'obj_bri_min': float(args.obj_brightness_min),
-            'obj_bri_max': float(args.obj_brightness_max),
+            'bg_bri_min': float(eff_bg_min),
+            'bg_bri_max': float(eff_bg_max),
+            'obj_bri_min': float(eff_obj_min),
+            'obj_bri_max': float(eff_obj_max),
         })
         cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
@@ -479,6 +521,7 @@ def main():
                 fp2 = files[idx]
                 k2, it2_raw = get_item(data, fp2)
                 mn2, mx2 = get_effective_scales(it2_raw, scope_class)
+                bmn2, bmx2, omn2, omx2 = get_effective_brightness(it2_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
                 while True:
                     state_q.get_nowait()
             except Empty:
@@ -489,10 +532,10 @@ def main():
                 'min_scale': float(mn2),
                 'max_scale': float(mx2),
                 'mode': preview_mode,
-                'bg_bri_min': float(args.bg_brightness_min),
-                'bg_bri_max': float(args.bg_brightness_max),
-                'obj_bri_min': float(args.obj_brightness_min),
-                'obj_bri_max': float(args.obj_brightness_max),
+                'bg_bri_min': float(bmn2),
+                'bg_bri_max': float(bmx2),
+                'obj_bri_min': float(omn2),
+                'obj_bri_max': float(omx2),
             })
             continue
         if cmd_name == 'prev' or k == ord('p'):
@@ -503,6 +546,7 @@ def main():
                 fp2 = files[idx]
                 k2, it2_raw = get_item(data, fp2)
                 mn2, mx2 = get_effective_scales(it2_raw, scope_class)
+                bmn2, bmx2, omn2, omx2 = get_effective_brightness(it2_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
                 while True:
                     state_q.get_nowait()
             except Empty:
@@ -513,10 +557,10 @@ def main():
                 'min_scale': float(mn2),
                 'max_scale': float(mx2),
                 'mode': preview_mode,
-                'bg_bri_min': float(args.bg_brightness_min),
-                'bg_bri_max': float(args.bg_brightness_max),
-                'obj_bri_min': float(args.obj_brightness_min),
-                'obj_bri_max': float(args.obj_brightness_max),
+                'bg_bri_min': float(bmn2),
+                'bg_bri_max': float(bmx2),
+                'obj_bri_min': float(omn2),
+                'obj_bri_max': float(omx2),
             })
             continue
         if cmd_name == 'draw' or k == ord('r'):
@@ -620,8 +664,12 @@ def main():
         if cmd_name == 'set_bg_bri' and isinstance(cmd, tuple) and len(cmd) > 2:
             try:
                 bmin = float(cmd[1]); bmax = float(cmd[2])
-                args.bg_brightness_min = min(bmin, bmax)
-                args.bg_brightness_max = max(bmin, bmax)
+                bmin, bmax = min(bmin, bmax), max(bmin, bmax)
+                _, _, omin_cur, omax_cur = get_effective_brightness(item_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
+                set_effective_brightness(item_raw, scope_class, bmin, bmax, omin_cur, omax_cur)
+                data['items'][key] = item_raw
+                args.bg_brightness_min, args.bg_brightness_max = bmin, bmax
+                save_now()
                 preview_cache['key'] = None
                 preview_cache['params'] = None
             except Exception:
@@ -630,8 +678,12 @@ def main():
         if cmd_name == 'set_obj_bri' and isinstance(cmd, tuple) and len(cmd) > 2:
             try:
                 omin = float(cmd[1]); omax = float(cmd[2])
-                args.obj_brightness_min = min(omin, omax)
-                args.obj_brightness_max = max(omin, omax)
+                omin, omax = min(omin, omax), max(omin, omax)
+                bmin_cur, bmax_cur, _, _ = get_effective_brightness(item_raw, scope_class, (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max))
+                set_effective_brightness(item_raw, scope_class, bmin_cur, bmax_cur, omin, omax)
+                data['items'][key] = item_raw
+                args.obj_brightness_min, args.obj_brightness_max = omin, omax
+                save_now()
                 preview_cache['key'] = None
                 preview_cache['params'] = None
             except Exception:

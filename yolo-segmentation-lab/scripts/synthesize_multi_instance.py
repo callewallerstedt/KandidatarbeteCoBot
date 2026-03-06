@@ -215,10 +215,27 @@ def main():
         prof = profile_for_bg(args, bg_path)
         min_scale_eff = float(args.min_scale)
         max_scale_eff = float(args.max_scale)
+        bg_bri_min_eff = float(args.brightness_min)
+        bg_bri_max_eff = float(args.brightness_max)
+        obj_bri_min_eff = float(args.object_brightness_min)
+        obj_bri_max_eff = float(args.object_brightness_max)
         poly_px = None
         if isinstance(prof, dict):
             min_scale_eff = float(prof.get('min_scale', min_scale_eff))
             max_scale_eff = float(prof.get('max_scale', max_scale_eff))
+            bg_bri_min_eff = float(prof.get('bg_brightness_min', bg_bri_min_eff))
+            bg_bri_max_eff = float(prof.get('bg_brightness_max', bg_bri_max_eff))
+            obj_bri_min_eff = float(prof.get('obj_brightness_min', obj_bri_min_eff))
+            obj_bri_max_eff = float(prof.get('obj_brightness_max', obj_bri_max_eff))
+            if args.class_name and isinstance(prof.get('class_settings'), dict):
+                cs = prof['class_settings'].get(args.class_name, {})
+                if isinstance(cs, dict):
+                    min_scale_eff = float(cs.get('min_scale', min_scale_eff))
+                    max_scale_eff = float(cs.get('max_scale', max_scale_eff))
+                    bg_bri_min_eff = float(cs.get('bg_brightness_min', bg_bri_min_eff))
+                    bg_bri_max_eff = float(cs.get('bg_brightness_max', bg_bri_max_eff))
+                    obj_bri_min_eff = float(cs.get('obj_brightness_min', obj_bri_min_eff))
+                    obj_bri_max_eff = float(cs.get('obj_brightness_max', obj_bri_max_eff))
             p = prof.get('poly')
             if isinstance(p, list) and len(p) >= 3:
                 poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in p]
@@ -314,7 +331,7 @@ def main():
             if not placed or new_full is None:
                 continue
 
-            obj_beta = random.uniform(args.object_brightness_min, args.object_brightness_max)
+            obj_beta = random.uniform(obj_bri_min_eff, obj_bri_max_eff)
             c_rr = cv2.convertScaleAbs(c_rr, alpha=1.0, beta=obj_beta)
 
             # Occlusion handling: new object is on top, subtract from previous visible masks
@@ -336,11 +353,11 @@ def main():
                 centers.append((int(xs2.mean()), int(ys2.mean())))
 
         if args.preview_mode == 'bg_bri_min':
-            bg_beta = float(args.brightness_min)
+            bg_beta = float(bg_bri_min_eff)
         elif args.preview_mode == 'bg_bri_max':
-            bg_beta = float(args.brightness_max)
+            bg_beta = float(bg_bri_max_eff)
         else:
-            bg_beta = random.uniform(args.brightness_min, args.brightness_max)
+            bg_beta = random.uniform(bg_bri_min_eff, bg_bri_max_eff)
         bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
 
         polys_new = []
