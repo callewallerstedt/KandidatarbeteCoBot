@@ -140,6 +140,36 @@ def parse_yolo_polygon(label_path, w, h):
     return np.round(pts).astype(np.int32)
 
 
+def get_item(data, fp):
+    key = str(fp).replace('\\', '/')
+    return key, data['items'].get(key, data['items'].get(fp.name, {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}))
+
+
+def get_effective_scales(item, class_name: str):
+    base_min = float(item.get('min_scale', 0.55))
+    base_max = float(item.get('max_scale', 1.25))
+    if class_name and isinstance(item.get('class_settings'), dict):
+        cs = item['class_settings'].get(class_name, {})
+        base_min = float(cs.get('min_scale', base_min))
+        base_max = float(cs.get('max_scale', base_max))
+    return base_min, base_max
+
+
+def set_effective_scales(item, class_name: str, min_scale: float, max_scale: float):
+    if class_name:
+        cs_all = item.get('class_settings')
+        if not isinstance(cs_all, dict):
+            cs_all = {}
+        cs = cs_all.get(class_name, {}) if isinstance(cs_all.get(class_name, {}), dict) else {}
+        cs['min_scale'] = float(min_scale)
+        cs['max_scale'] = float(max_scale)
+        cs_all[class_name] = cs
+        item['class_settings'] = cs_all
+    else:
+        item['min_scale'] = float(min_scale)
+        item['max_scale'] = float(max_scale)
+
+
 def extract_object_sample(data_root: Path, class_name: str):
     img_root = data_root / 'images' / class_name
     lbl_root = data_root / 'labels' / class_name
@@ -348,6 +378,7 @@ def main():
     if args.class_name.strip():
         sample_obj = extract_object_sample(Path(args.data_root), args.class_name.strip())
 
+    scope_class = (args.class_name or '').strip()
     preview_mode = 'pv_random'
     preview_cache = {'key': None, 'params': None}
 
@@ -362,8 +393,11 @@ def main():
     idx = 0
     while True:
         fp = files[idx]
-        key = str(fp).replace('\\', '/')
-        item = data['items'].get(key, data['items'].get(fp.name, {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}))
+        key, item_raw = get_item(data, fp)
+        eff_min, eff_max = get_effective_scales(item_raw, scope_class)
+        item = dict(item_raw)
+        item['min_scale'] = eff_min
+        item['max_scale'] = eff_max
 
         img = cv2.imread(str(fp))
         if img is None:
@@ -443,8 +477,8 @@ def main():
             preview_cache['params'] = None
             try:
                 fp2 = files[idx]
-                k2 = str(fp2).replace('\\', '/')
-                it2 = data['items'].get(k2, data['items'].get(fp2.name, {'min_scale': 0.55, 'max_scale': 1.25}))
+                k2, it2_raw = get_item(data, fp2)
+                mn2, mx2 = get_effective_scales(it2_raw, scope_class)
                 while True:
                     state_q.get_nowait()
             except Empty:
@@ -452,8 +486,8 @@ def main():
             state_q.put({
                 'bg': str(fp2.relative_to(bg_dir)).replace('\\', '/'),
                 'bg_id': k2,
-                'min_scale': float(it2.get('min_scale', 0.55)),
-                'max_scale': float(it2.get('max_scale', 1.25)),
+                'min_scale': float(mn2),
+                'max_scale': float(mx2),
                 'mode': preview_mode,
                 'bg_bri_min': float(args.bg_brightness_min),
                 'bg_bri_max': float(args.bg_brightness_max),
@@ -467,8 +501,8 @@ def main():
             preview_cache['params'] = None
             try:
                 fp2 = files[idx]
-                k2 = str(fp2).replace('\\', '/')
-                it2 = data['items'].get(k2, data['items'].get(fp2.name, {'min_scale': 0.55, 'max_scale': 1.25}))
+                k2, it2_raw = get_item(data, fp2)
+                mn2, mx2 = get_effective_scales(it2_raw, scope_class)
                 while True:
                     state_q.get_nowait()
             except Empty:
@@ -476,8 +510,8 @@ def main():
             state_q.put({
                 'bg': str(fp2.relative_to(bg_dir)).replace('\\', '/'),
                 'bg_id': k2,
-                'min_scale': float(it2.get('min_scale', 0.55)),
-                'max_scale': float(it2.get('max_scale', 1.25)),
+                'min_scale': float(mn2),
+                'max_scale': float(mx2),
                 'mode': preview_mode,
                 'bg_bri_min': float(args.bg_brightness_min),
                 'bg_bri_max': float(args.bg_brightness_max),
@@ -530,37 +564,42 @@ def main():
             cv2.setMouseCallback('BG Placement Profile Editor', lambda *a: None)
             continue
         if cmd_name == 'min-' or k == ord('['):
-            item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
-            data['items'][key] = item
+            new_min = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
+            set_effective_scales(item_raw, scope_class, new_min, float(item.get('max_scale', 1.25)))
+            data['items'][key] = item_raw
             save_now()
             preview_cache['key'] = None
             preview_cache['params'] = None
             continue
         if cmd_name == 'min+' or k == ord(']'):
-            item['min_scale'] = round(min(3.0, float(item.get('min_scale', 0.55)) + 0.05), 3)
-            data['items'][key] = item
+            new_min = round(min(3.0, float(item.get('min_scale', 0.55)) + 0.05), 3)
+            set_effective_scales(item_raw, scope_class, new_min, float(item.get('max_scale', 1.25)))
+            data['items'][key] = item_raw
             save_now()
             preview_cache['key'] = None
             preview_cache['params'] = None
             continue
         if cmd_name == 'max-' or k == ord('-'):
-            item['max_scale'] = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
-            data['items'][key] = item
+            new_max = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
+            set_effective_scales(item_raw, scope_class, float(item.get('min_scale', 0.55)), new_max)
+            data['items'][key] = item_raw
             save_now()
             preview_cache['key'] = None
             preview_cache['params'] = None
             continue
         if cmd_name == 'max+' or k == ord('='):
-            item['max_scale'] = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
-            data['items'][key] = item
+            new_max = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
+            set_effective_scales(item_raw, scope_class, float(item.get('min_scale', 0.55)), new_max)
+            data['items'][key] = item_raw
             save_now()
             preview_cache['key'] = None
             preview_cache['params'] = None
             continue
         if cmd_name == 'set_min' and isinstance(cmd, tuple) and len(cmd) > 1:
             try:
-                item['min_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
-                data['items'][key] = item
+                new_min = round(min(3.0, max(0.05, float(cmd[1]))), 3)
+                set_effective_scales(item_raw, scope_class, new_min, float(item.get('max_scale', 1.25)))
+                data['items'][key] = item_raw
                 save_now()
                 preview_cache['key'] = None
                 preview_cache['params'] = None
@@ -569,8 +608,9 @@ def main():
             continue
         if cmd_name == 'set_max' and isinstance(cmd, tuple) and len(cmd) > 1:
             try:
-                item['max_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
-                data['items'][key] = item
+                new_max = round(min(3.0, max(0.05, float(cmd[1]))), 3)
+                set_effective_scales(item_raw, scope_class, float(item.get('min_scale', 0.55)), new_max)
+                data['items'][key] = item_raw
                 save_now()
                 preview_cache['key'] = None
                 preview_cache['params'] = None
@@ -598,19 +638,14 @@ def main():
                 pass
             continue
         if cmd_name == 'copy_all':
-            template = {
-                'rect': item.get('rect', [0.0, 0.0, 1.0, 1.0]),
-                'min_scale': float(item.get('min_scale', 0.55)),
-                'max_scale': float(item.get('max_scale', 1.25)),
-            }
-            if isinstance(item.get('poly'), list) and len(item.get('poly')) >= 3:
-                template['poly'] = item.get('poly')
+            # Copy ONLY scale settings. Never copy per-background polygon/rect.
+            src_min = float(item.get('min_scale', 0.55))
+            src_max = float(item.get('max_scale', 1.25))
             for fp2 in files:
-                k2 = str(fp2).replace('\\', '/')
-                cur = data['items'].get(k2, data['items'].get(fp2.name, {}))
-                merged = dict(cur)
-                merged.update(template)
-                data['items'][k2] = merged
+                k2, cur = get_item(data, fp2)
+                cur2 = dict(cur)
+                set_effective_scales(cur2, scope_class, src_min, src_max)
+                data['items'][k2] = cur2
             save_now()
             preview_cache['key'] = None
             preview_cache['params'] = None
