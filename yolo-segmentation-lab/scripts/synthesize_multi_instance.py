@@ -249,7 +249,8 @@ def main():
         centers = []
         attempts = 0
         # Keep trying random cutouts until we either hit target or exhaust budget.
-        max_place_attempts = max(80, target_obj * 60)
+        # Preview should stay snappy.
+        max_place_attempts = max(30, target_obj * (20 if args.preview_only else 60))
         while len(visible_masks) < target_obj and attempts < max_place_attempts:
             attempts += 1
             cls_id, crop, crop_m = random.choice(cutouts)
@@ -374,8 +375,9 @@ def main():
                 polys_new.append(p)
 
         if len(polys_new) < min_req:
-            # enforce min objects per image strictly
-            continue
+            # For preview, allow partial samples so user always gets visual feedback quickly.
+            if not args.preview_only or len(polys_new) == 0:
+                continue
 
         stem = f'{args.class_name}_synthmulti_{i + 1:06d}'
         out_img = out_img_dir / f'{stem}.jpg'
@@ -408,6 +410,8 @@ def main():
         made += 1
 
     print(f'Multi-instance synthetic created: {made}')
+    if args.preview_only and made == 0:
+        print('Preview note: no valid samples with current strict settings. Try lower min objects or wider placement area/profile.')
     print(f'Run name: {run_name}')
     if args.preview_only:
         print('Preview-only mode: no train images/labels written.')
