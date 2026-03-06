@@ -290,14 +290,14 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
                         max_entry.insert(0, f"{st.get('max_scale', 1.25):.3f}")
                     if bg_id != last_bg['id'] or not bg_focused:
                         bg_min_entry.delete(0, 'end')
-                        bg_min_entry.insert(0, f"{float(args.bg_brightness_min):.1f}")
+                        bg_min_entry.insert(0, f"{float(st.get('bg_bri_min', -20.0)):.1f}")
                         bg_max_entry.delete(0, 'end')
-                        bg_max_entry.insert(0, f"{float(args.bg_brightness_max):.1f}")
+                        bg_max_entry.insert(0, f"{float(st.get('bg_bri_max', 20.0)):.1f}")
                     if bg_id != last_bg['id'] or not obj_focused:
                         obj_min_entry.delete(0, 'end')
-                        obj_min_entry.insert(0, f"{float(args.obj_brightness_min):.1f}")
+                        obj_min_entry.insert(0, f"{float(st.get('obj_bri_min', -15.0)):.1f}")
                         obj_max_entry.delete(0, 'end')
-                        obj_max_entry.insert(0, f"{float(args.obj_brightness_max):.1f}")
+                        obj_max_entry.insert(0, f"{float(st.get('obj_bri_max', 15.0)):.1f}")
 
                     last_bg['id'] = bg_id
             except Empty:
@@ -394,6 +394,10 @@ def main():
             'min_scale': float(item.get('min_scale', 0.55)),
             'max_scale': float(item.get('max_scale', 1.25)),
             'mode': preview_mode,
+            'bg_bri_min': float(args.bg_brightness_min),
+            'bg_bri_max': float(args.bg_brightness_max),
+            'obj_bri_min': float(args.obj_brightness_min),
+            'obj_bri_max': float(args.obj_brightness_max),
         })
         cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
@@ -451,6 +455,10 @@ def main():
                 'min_scale': float(it2.get('min_scale', 0.55)),
                 'max_scale': float(it2.get('max_scale', 1.25)),
                 'mode': preview_mode,
+                'bg_bri_min': float(args.bg_brightness_min),
+                'bg_bri_max': float(args.bg_brightness_max),
+                'obj_bri_min': float(args.obj_brightness_min),
+                'obj_bri_max': float(args.obj_brightness_max),
             })
             continue
         if cmd_name == 'prev' or k == ord('p'):
@@ -471,6 +479,10 @@ def main():
                 'min_scale': float(it2.get('min_scale', 0.55)),
                 'max_scale': float(it2.get('max_scale', 1.25)),
                 'mode': preview_mode,
+                'bg_bri_min': float(args.bg_brightness_min),
+                'bg_bri_max': float(args.bg_brightness_max),
+                'obj_bri_min': float(args.obj_brightness_min),
+                'obj_bri_max': float(args.obj_brightness_max),
             })
             continue
         if cmd_name == 'draw' or k == ord('r'):
