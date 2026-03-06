@@ -173,7 +173,7 @@ def extract_object_sample(data_root: Path, class_name: str):
 def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     root = tk.Tk()
     root.title('BG Profile Controls')
-    root.geometry('420x520')
+    root.geometry('440x760')
 
     frm = ttk.Frame(root, padding=10)
     frm.pack(fill='both', expand=True)
@@ -181,17 +181,17 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     def push(c):
         cmd_q.put(c)
 
-    ttk.Button(frm, text='Prev (p)', command=lambda: push('prev')).grid(row=0, column=0, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Next (n)', command=lambda: push('next')).grid(row=0, column=1, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Draw Polygon (r)', command=lambda: push('draw')).grid(row=1, column=0, columnspan=2, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Prev (p)', command=lambda: push('prev'), bg='#374151', fg='white', activebackground='#4b5563').grid(row=0, column=0, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Next (n)', command=lambda: push('next'), bg='#374151', fg='white', activebackground='#4b5563').grid(row=0, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Draw Polygon (r)', command=lambda: push('draw'), bg='#0f766e', fg='white', activebackground='#0d9488').grid(row=1, column=0, columnspan=2, sticky='we', padx=4, pady=4)
 
-    ttk.Button(frm, text='Min - ([)', command=lambda: push('min-')).grid(row=2, column=0, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Min + (])', command=lambda: push('min+')).grid(row=2, column=1, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Max - (-)', command=lambda: push('max-')).grid(row=3, column=0, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Max + (=)', command=lambda: push('max+')).grid(row=3, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Min - ([)', command=lambda: push('min-'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=2, column=0, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Min + (])', command=lambda: push('min+'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=2, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Max - (-)', command=lambda: push('max-'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=3, column=0, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Max + (=)', command=lambda: push('max+'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=3, column=1, sticky='we', padx=4, pady=4)
 
-    ttk.Button(frm, text='Save (s)', command=lambda: push('save')).grid(row=4, column=0, sticky='we', padx=4, pady=4)
-    ttk.Button(frm, text='Quit (q)', command=lambda: push('quit')).grid(row=4, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Save (s)', command=lambda: push('save'), bg='#065f46', fg='white', activebackground='#047857').grid(row=4, column=0, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Quit (q)', command=lambda: push('quit'), bg='#7f1d1d', fg='white', activebackground='#991b1b').grid(row=4, column=1, sticky='we', padx=4, pady=4)
 
     ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=2, sticky='we', pady=6)
 
@@ -213,20 +213,38 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     max_entry.insert(0, '1.25')
     min_entry.grid(row=11, column=0, sticky='w', padx=4)
     max_entry.grid(row=11, column=1, sticky='w', padx=4)
-    ttk.Button(frm, text='Apply Min', command=lambda: push(('set_min', min_entry.get()))).grid(row=12, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='Apply Max', command=lambda: push(('set_max', max_entry.get()))).grid(row=12, column=1, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='Apply Min', command=lambda: push(('set_min', min_entry.get())), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=12, column=0, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='Apply Max', command=lambda: push(('set_max', max_entry.get())), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=12, column=1, sticky='we', padx=4, pady=3)
 
-    ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=2, sticky='we', pady=6)
-    ttk.Label(frm, text='Live Preview Mode').grid(row=14, column=0, columnspan=2, sticky='w', padx=4)
-    ttk.Button(frm, text='ObjScale MIN', command=lambda: push('pv_obj_scale_min')).grid(row=15, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjScale MAX', command=lambda: push('pv_obj_scale_max')).grid(row=15, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjBright MIN', command=lambda: push('pv_obj_bri_min')).grid(row=16, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjBright MAX', command=lambda: push('pv_obj_bri_max')).grid(row=16, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='BgBright MIN', command=lambda: push('pv_bg_bri_min')).grid(row=17, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='BgBright MAX', command=lambda: push('pv_bg_bri_max')).grid(row=17, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='Random Preview', command=lambda: push('pv_random')).grid(row=18, column=0, columnspan=2, sticky='we', padx=4, pady=3)
+    ttk.Label(frm, text='Set brightness min/max (preview)').grid(row=13, column=0, columnspan=2, sticky='w', padx=4, pady=(6,2))
+    bg_min_entry = ttk.Entry(frm, width=10)
+    bg_max_entry = ttk.Entry(frm, width=10)
+    obj_min_entry = ttk.Entry(frm, width=10)
+    obj_max_entry = ttk.Entry(frm, width=10)
+    bg_min_entry.insert(0, '-20')
+    bg_max_entry.insert(0, '20')
+    obj_min_entry.insert(0, '-15')
+    obj_max_entry.insert(0, '15')
+    ttk.Label(frm, text='BG min/max').grid(row=14, column=0, sticky='w', padx=4)
+    bg_min_entry.grid(row=14, column=0, padx=(82,0), sticky='w')
+    bg_max_entry.grid(row=14, column=1, sticky='w', padx=4)
+    ttk.Label(frm, text='OBJ min/max').grid(row=15, column=0, sticky='w', padx=4)
+    obj_min_entry.grid(row=15, column=0, padx=(82,0), sticky='w')
+    obj_max_entry.grid(row=15, column=1, sticky='w', padx=4)
+    tk.Button(frm, text='Apply BG', command=lambda: push(('set_bg_bri', bg_min_entry.get(), bg_max_entry.get())), bg='#6d28d9', fg='white', activebackground='#7c3aed').grid(row=16, column=0, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='Apply OBJ', command=lambda: push(('set_obj_bri', obj_min_entry.get(), obj_max_entry.get())), bg='#6d28d9', fg='white', activebackground='#7c3aed').grid(row=16, column=1, sticky='we', padx=4, pady=3)
 
-    ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=19, column=0, columnspan=2, sticky='w', padx=4, pady=8)
+    ttk.Separator(frm, orient='horizontal').grid(row=17, column=0, columnspan=2, sticky='we', pady=6)
+    ttk.Label(frm, text='Live Preview Mode').grid(row=18, column=0, columnspan=2, sticky='w', padx=4)
+    tk.Button(frm, text='ObjScale MIN', command=lambda: push('pv_obj_scale_min'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=19, column=0, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='ObjScale MAX', command=lambda: push('pv_obj_scale_max'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=19, column=1, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='ObjBright MIN', command=lambda: push('pv_obj_bri_min'), bg='#6d28d9', fg='white', activebackground='#7c3aed').grid(row=20, column=0, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='ObjBright MAX', command=lambda: push('pv_obj_bri_max'), bg='#6d28d9', fg='white', activebackground='#7c3aed').grid(row=20, column=1, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='BgBright MIN', command=lambda: push('pv_bg_bri_min'), bg='#9333ea', fg='white', activebackground='#a855f7').grid(row=21, column=0, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='BgBright MAX', command=lambda: push('pv_bg_bri_max'), bg='#9333ea', fg='white', activebackground='#a855f7').grid(row=21, column=1, sticky='we', padx=4, pady=3)
+    tk.Button(frm, text='Random Preview', command=lambda: push('pv_random'), bg='#374151', fg='white', activebackground='#4b5563').grid(row=22, column=0, columnspan=2, sticky='we', padx=4, pady=3)
+
+    ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=23, column=0, columnspan=2, sticky='w', padx=4, pady=8)
 
     last_bg = {'name': None}
 
@@ -253,6 +271,14 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
                         min_entry.insert(0, f"{st.get('min_scale', 0.55):.3f}")
                         max_entry.delete(0, 'end')
                         max_entry.insert(0, f"{st.get('max_scale', 1.25):.3f}")
+                        bg_min_entry.delete(0, 'end')
+                        bg_min_entry.insert(0, f"{float(args.bg_brightness_min):.1f}")
+                        bg_max_entry.delete(0, 'end')
+                        bg_max_entry.insert(0, f"{float(args.bg_brightness_max):.1f}")
+                        obj_min_entry.delete(0, 'end')
+                        obj_min_entry.insert(0, f"{float(args.obj_brightness_min):.1f}")
+                        obj_max_entry.delete(0, 'end')
+                        obj_max_entry.insert(0, f"{float(args.obj_brightness_max):.1f}")
                         last_bg['name'] = bg_name
             except Empty:
                 pass
@@ -469,6 +495,28 @@ def main():
                 item['max_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
                 data['items'][key] = item
                 save_now()
+                preview_cache['key'] = None
+                preview_cache['params'] = None
+            except Exception:
+                pass
+            continue
+        if cmd_name == 'set_bg_bri' and isinstance(cmd, tuple) and len(cmd) > 2:
+            try:
+                bmin = float(cmd[1]); bmax = float(cmd[2])
+                args.bg_brightness_min = min(bmin, bmax)
+                args.bg_brightness_max = max(bmin, bmax)
+                preview_cache['key'] = None
+                preview_cache['params'] = None
+            except Exception:
+                pass
+            continue
+        if cmd_name == 'set_obj_bri' and isinstance(cmd, tuple) and len(cmd) > 2:
+            try:
+                omin = float(cmd[1]); omax = float(cmd[2])
+                args.obj_brightness_min = min(omin, omax)
+                args.obj_brightness_max = max(omin, omax)
+                preview_cache['key'] = None
+                preview_cache['params'] = None
             except Exception:
                 pass
             continue
