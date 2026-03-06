@@ -162,6 +162,8 @@ class App(tk.Tk):
             'auto_poly_eps_var': self.auto_poly_eps_var,
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
             'auto_bg_color_thr_var': self.auto_bg_color_thr_var,
+            'auto_mask_upscale_var': self.auto_mask_upscale_var,
+            'auto_keep_largest_var': self.auto_keep_largest_var,
             'auto_preview_count_var': self.auto_preview_count_var,
             'synth_place_rect_var': self.synth_place_rect_var,
             'synth_place_profile_var': self.synth_place_profile_var,
@@ -507,9 +509,11 @@ class App(tk.Tk):
         self.auto_run_var = tk.StringVar(value='')
         self.auto_min_area_var = tk.StringVar(value='0.01')
         self.auto_max_area_var = tk.StringVar(value='0.80')
-        self.auto_poly_eps_var = tk.StringVar(value='0.0008')
+        self.auto_poly_eps_var = tk.StringVar(value='0.00035')
         self.auto_alpha_thr_var = tk.StringVar(value='100')
         self.auto_bg_color_thr_var = tk.StringVar(value='0')
+        self.auto_mask_upscale_var = tk.StringVar(value='1')
+        self.auto_keep_largest_var = tk.BooleanVar(value=True)
         self.auto_preview_count_var = tk.StringVar(value='2')
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
@@ -547,7 +551,9 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.aug_var).grid(row=6, column=1, sticky='we')
 
         ttk.Label(frm, text='Mask quality').grid(row=7, column=0, sticky='w')
-        ttk.Combobox(frm, textvariable=self.mask_quality_var, values=['fast', 'high'], state='readonly', width=10).grid(row=7, column=1, sticky='w')
+        ttk.Combobox(frm, textvariable=self.mask_quality_var, values=['fast', 'high', 'ultra'], state='readonly', width=10).grid(row=7, column=1, sticky='w')
+        ttk.Label(frm, text='Upscale').grid(row=7, column=1, padx=(90,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_mask_upscale_var, width=6).grid(row=7, column=2, sticky='w')
 
         ttk.Label(frm, text='Component').grid(row=8, column=0, sticky='w')
         self.data_component_cb = ttk.Combobox(frm, textvariable=self.auto_component_var, values=self.component_choices, width=20)
@@ -568,6 +574,7 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.auto_alpha_thr_var, width=8).grid(row=11, column=1, sticky='w')
         ttk.Label(frm, text='BG color tol').grid(row=11, column=1, padx=(90,0), sticky='w')
         ttk.Entry(frm, textvariable=self.auto_bg_color_thr_var, width=8).grid(row=11, column=2, sticky='w')
+        ttk.Checkbutton(frm, text='Keep largest component', variable=self.auto_keep_largest_var).grid(row=11, column=2, padx=(90,0), sticky='w')
 
         ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.auto_preview_count_var, width=8).grid(row=12, column=1, sticky='w')
@@ -1755,11 +1762,14 @@ class App(tk.Tk):
             '--poly-eps', self.auto_poly_eps_var.get(),
             '--alpha-threshold', self.auto_alpha_thr_var.get(),
             '--bg-color-threshold', self.auto_bg_color_thr_var.get(),
+            '--mask-upscale', self.auto_mask_upscale_var.get(),
         ]
         if src and Path(src).is_dir():
             cmd.extend(['--video-dir', src])
         else:
             cmd.extend(['--video', src])
+        if self.auto_keep_largest_var.get():
+            cmd.append('--keep-largest-component')
         if self.auto_run_var.get().strip():
             cmd.extend(['--run-name', self.auto_run_var.get().strip()])
         return cmd

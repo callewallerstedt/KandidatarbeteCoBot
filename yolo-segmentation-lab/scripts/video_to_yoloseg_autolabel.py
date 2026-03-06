@@ -12,6 +12,11 @@ def mask_to_polygon(mask, eps=0.0008):
     if not cnts:
         return None
     c = max(cnts, key=cv2.contourArea)
+    if eps <= 0:
+        poly = c.reshape(-1, 2)
+        if len(poly) < 3:
+            return None
+        return poly
     peri = cv2.arcLength(c, True)
     approx = cv2.approxPolyDP(c, eps * peri, True)
     if len(approx) < 3:
@@ -38,8 +43,14 @@ def augment(img):
     return out
 
 
-def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_threshold=0):
-    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_threshold=0, mask_upscale=1, keep_largest=True):
+    h0, w0 = frame_bgr.shape[:2]
+    work = frame_bgr
+    up = max(1, int(mask_upscale))
+    if up > 1:
+        work = cv2.resize(frame_bgr, (w0 * up, h0 * up), interpolation=cv2.INTER_CUBIC)
+
+    frame_rgb = cv2.cvtColor(work, cv2.COLOR_BGR2RGB)
     out = remove(frame_rgb)
     # rembg can return RGBA
     if out.shape[2] == 4:
@@ -47,7 +58,14 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_
     else:
         gray = cv2.cvtColor(out, cv2.COLOR_RGB2GRAY)
         _, alpha = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    if quality == 'high':
+    if quality == 'ultra':
+        # Preserve corners/edges: avoid heavy blur + minimal morphology.
+        alpha = cv2.bilateralFilter(alpha, 7, 35, 35)
+        thr = alpha_threshold if alpha_threshold >= 0 else 82
+        _, mask = cv2.threshold(alpha, int(thr), 255, cv2.THRESH_BINARY)
+        kernel_open = np.ones((2, 2), np.uint8)
+        kernel_close = np.ones((3, 3), np.uint8)
+    elif quality == 'high':
         alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
         thr = alpha_threshold if alpha_threshold >= 0 else 100
         _, mask = cv2.threshold(alpha, int(thr), 255, cv2.THRESH_BINARY)
@@ -64,7 +82,7 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_
 
     # Optional background-color suppression: sample border color and remove similar pixels.
     if bg_color_threshold and bg_color_threshold > 0:
-        hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(work, cv2.COLOR_BGR2HSV)
         border = np.concatenate([hsv[0, :, :], hsv[-1, :, :], hsv[:, 0, :], hsv[:, -1, :]], axis=0)
         med = np.median(border, axis=0).astype(np.uint8)
         tol = int(bg_color_threshold)
@@ -76,12 +94,25 @@ def foreground_mask_bgr(frame_bgr, quality='high', alpha_threshold=-1, bg_color_
     # Sensitivity boost: make threshold visibly affect mask size even on hard alpha edges.
     if alpha_threshold >= 0:
         thr = int(alpha_threshold)
-        if thr < 110:
-            it = max(1, int((110 - thr) / 15))
+        pivot_low = 110 if quality != 'ultra' else 95
+        pivot_high = 120 if quality != 'ultra' else 115
+        if thr < pivot_low:
+            it = max(1, int((pivot_low - thr) / 15))
             mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=it)
-        elif thr > 120:
-            it = max(1, int((thr - 120) / 20))
+        elif thr > pivot_high:
+            it = max(1, int((thr - pivot_high) / 20))
             mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=it)
+
+    if keep_largest:
+        nlab, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        if nlab > 1:
+            areas = stats[1:, cv2.CC_STAT_AREA]
+            best = 1 + int(np.argmax(areas))
+            mask = np.where(labels == best, 255, 0).astype(np.uint8)
+
+    if up > 1:
+        mask = cv2.resize(mask, (w0, h0), interpolation=cv2.INTER_AREA)
+        _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
 
     return mask
 
@@ -101,8 +132,10 @@ def main():
     ap.add_argument('--aug-per-frame', type=int, default=1)
     ap.add_argument('--min-area-ratio', type=float, default=0.01)
     ap.add_argument('--max-area-ratio', type=float, default=0.80)
-    ap.add_argument('--mask-quality', choices=['fast', 'high'], default='high')
-    ap.add_argument('--poly-eps', type=float, default=0.0008, help='Polygon simplification ratio; smaller = more detail')
+    ap.add_argument('--mask-quality', choices=['fast', 'high', 'ultra'], default='high')
+    ap.add_argument('--poly-eps', type=float, default=0.00035, help='Polygon simplification ratio; smaller = more detail (0 = full contour)')
+    ap.add_argument('--mask-upscale', type=int, default=1, help='Upscale factor before rembg (ultra detail). 1=off, 2=better edges')
+    ap.add_argument('--keep-largest-component', action='store_true', help='Keep only largest connected foreground component')
     ap.add_argument('--alpha-threshold', type=int, default=-1, help='Alpha threshold for foreground mask (0-255). Lower=more sensitive, higher=stricter.')
     ap.add_argument('--bg-color-threshold', type=int, default=0, help='HSV tolerance to remove border-like background colors (0=off)')
     ap.add_argument('--preview-only', action='store_true', help='Generate previews only (no train image/label writes)')
@@ -183,7 +216,18 @@ def main():
                 img = frame if a == 0 else augment(frame)
                 if img is None or img.size == 0:
                     continue
-                mask = foreground_mask_bgr(img, quality=args.mask_quality, alpha_threshold=args.alpha_threshold, bg_color_threshold=args.bg_color_threshold)
+                upscale_eff = args.mask_upscale
+                if args.mask_quality == 'ultra' and upscale_eff < 2:
+                    upscale_eff = 2
+                keep_largest_eff = args.keep_largest_component or (args.mask_quality == 'ultra')
+                mask = foreground_mask_bgr(
+                    img,
+                    quality=args.mask_quality,
+                    alpha_threshold=args.alpha_threshold,
+                    bg_color_threshold=args.bg_color_threshold,
+                    mask_upscale=upscale_eff,
+                    keep_largest=keep_largest_eff,
+                )
                 h, w = mask.shape
                 area = float((mask > 0).sum()) / float(h * w)
                 if area < args.min_area_ratio or area > args.max_area_ratio:
