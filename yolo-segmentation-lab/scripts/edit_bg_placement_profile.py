@@ -145,10 +145,10 @@ def extract_object_sample(data_root: Path, class_name: str):
     return None
 
 
-def launch_control_panel(cmd_q):
+def launch_control_panel(cmd_q, state_q=None):
     root = tk.Tk()
     root.title('BG Profile Controls')
-    root.geometry('320x280')
+    root.geometry('420x520')
 
     frm = ttk.Frame(root, padding=10)
     frm.pack(fill='both', expand=True)
@@ -169,17 +169,54 @@ def launch_control_panel(cmd_q):
     ttk.Button(frm, text='Quit (q)', command=lambda: push('quit')).grid(row=4, column=1, sticky='we', padx=4, pady=4)
 
     ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=2, sticky='we', pady=6)
-    ttk.Label(frm, text='Live Preview Mode').grid(row=6, column=0, columnspan=2, sticky='w', padx=4)
-    ttk.Button(frm, text='ObjScale MIN', command=lambda: push('pv_obj_scale_min')).grid(row=7, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjScale MAX', command=lambda: push('pv_obj_scale_max')).grid(row=7, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjBright MIN', command=lambda: push('pv_obj_bri_min')).grid(row=8, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='ObjBright MAX', command=lambda: push('pv_obj_bri_max')).grid(row=8, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='BgBright MIN', command=lambda: push('pv_bg_bri_min')).grid(row=9, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='BgBright MAX', command=lambda: push('pv_bg_bri_max')).grid(row=9, column=1, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='Random Preview', command=lambda: push('pv_random')).grid(row=10, column=0, columnspan=2, sticky='we', padx=4, pady=3)
 
-    ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=11, column=0, columnspan=2, sticky='w', padx=4, pady=8)
+    ttk.Label(frm, text='Current Background').grid(row=6, column=0, columnspan=2, sticky='w', padx=4)
+    current_bg_var = tk.StringVar(value='-')
+    ttk.Label(frm, textvariable=current_bg_var, wraplength=360).grid(row=7, column=0, columnspan=2, sticky='w', padx=4)
 
+    current_min_var = tk.StringVar(value='min=0.55')
+    current_max_var = tk.StringVar(value='max=1.25')
+    current_mode_var = tk.StringVar(value='mode=random')
+    ttk.Label(frm, textvariable=current_min_var).grid(row=8, column=0, sticky='w', padx=4)
+    ttk.Label(frm, textvariable=current_max_var).grid(row=8, column=1, sticky='w', padx=4)
+    ttk.Label(frm, textvariable=current_mode_var).grid(row=9, column=0, columnspan=2, sticky='w', padx=4)
+
+    ttk.Label(frm, text='Set exact min/max scale').grid(row=10, column=0, columnspan=2, sticky='w', padx=4, pady=(6,2))
+    min_set_var = tk.StringVar(value='0.55')
+    max_set_var = tk.StringVar(value='1.25')
+    ttk.Entry(frm, textvariable=min_set_var, width=10).grid(row=11, column=0, sticky='w', padx=4)
+    ttk.Entry(frm, textvariable=max_set_var, width=10).grid(row=11, column=1, sticky='w', padx=4)
+    ttk.Button(frm, text='Apply Min', command=lambda: push(('set_min', min_set_var.get()))).grid(row=12, column=0, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='Apply Max', command=lambda: push(('set_max', max_set_var.get()))).grid(row=12, column=1, sticky='we', padx=4, pady=3)
+
+    ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=2, sticky='we', pady=6)
+    ttk.Label(frm, text='Live Preview Mode').grid(row=14, column=0, columnspan=2, sticky='w', padx=4)
+    ttk.Button(frm, text='ObjScale MIN', command=lambda: push('pv_obj_scale_min')).grid(row=15, column=0, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='ObjScale MAX', command=lambda: push('pv_obj_scale_max')).grid(row=15, column=1, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='ObjBright MIN', command=lambda: push('pv_obj_bri_min')).grid(row=16, column=0, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='ObjBright MAX', command=lambda: push('pv_obj_bri_max')).grid(row=16, column=1, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='BgBright MIN', command=lambda: push('pv_bg_bri_min')).grid(row=17, column=0, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='BgBright MAX', command=lambda: push('pv_bg_bri_max')).grid(row=17, column=1, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='Random Preview', command=lambda: push('pv_random')).grid(row=18, column=0, columnspan=2, sticky='we', padx=4, pady=3)
+
+    ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=19, column=0, columnspan=2, sticky='w', padx=4, pady=8)
+
+    def sync_state():
+        if state_q is not None:
+            try:
+                while True:
+                    st = state_q.get_nowait()
+                    current_bg_var.set(st.get('bg', '-'))
+                    current_min_var.set(f"min={st.get('min_scale', 0.55):.3f}")
+                    current_max_var.set(f"max={st.get('max_scale', 1.25):.3f}")
+                    current_mode_var.set(f"mode={st.get('mode', 'pv_random')}")
+                    min_set_var.set(f"{st.get('min_scale', 0.55):.3f}")
+                    max_set_var.set(f"{st.get('max_scale', 1.25):.3f}")
+            except Empty:
+                pass
+        root.after(150, sync_state)
+
+    sync_state()
     frm.columnconfigure(0, weight=1)
     frm.columnconfigure(1, weight=1)
     root.mainloop()
@@ -225,8 +262,9 @@ def main():
     preview_mode = 'pv_random'
 
     cmd_q = Queue()
+    state_q = Queue()
     if args.control_window:
-        th = threading.Thread(target=launch_control_panel, args=(cmd_q,), daemon=True)
+        th = threading.Thread(target=launch_control_panel, args=(cmd_q, state_q), daemon=True)
         th.start()
 
     idx = 0
@@ -251,6 +289,19 @@ def main():
             cv2.rectangle(disp, (x1, y1), (x2, y2), (0, 255, 255), 2)
         txt = f'{idx+1}/{len(files)} {fp.name}  min={item.get("min_scale",0.55):.2f} max={item.get("max_scale",1.25):.2f}'
         cv2.putText(disp, txt, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2, cv2.LINE_AA)
+
+        # publish live state for toolbox window
+        try:
+            while True:
+                state_q.get_nowait()
+        except Empty:
+            pass
+        state_q.put({
+            'bg': fp.name,
+            'min_scale': float(item.get('min_scale', 0.55)),
+            'max_scale': float(item.get('max_scale', 1.25)),
+            'mode': preview_mode,
+        })
         cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
         cv2.imshow('BG Placement Profile Editor', disp)
@@ -267,19 +318,21 @@ def main():
         except Empty:
             pass
 
-        if cmd in {'pv_obj_scale_min','pv_obj_scale_max','pv_obj_bri_min','pv_obj_bri_max','pv_bg_bri_min','pv_bg_bri_max','pv_random'}:
-            preview_mode = cmd
+        cmd_name = cmd[0] if isinstance(cmd, tuple) else cmd
+
+        if cmd_name in {'pv_obj_scale_min','pv_obj_scale_max','pv_obj_bri_min','pv_obj_bri_max','pv_bg_bri_min','pv_bg_bri_max','pv_random'}:
+            preview_mode = cmd_name
             continue
 
-        if cmd == 'quit' or k in (ord('q'), 27):
+        if cmd_name == 'quit' or k in (ord('q'), 27):
             break
-        if cmd == 'next' or k == ord('n'):
+        if cmd_name == 'next' or k == ord('n'):
             idx = min(len(files)-1, idx + 1)
             continue
-        if cmd == 'prev' or k == ord('p'):
+        if cmd_name == 'prev' or k == ord('p'):
             idx = max(0, idx - 1)
             continue
-        if cmd == 'draw' or k == ord('r'):
+        if cmd_name == 'draw' or k == ord('r'):
             sel_img, s2 = fit(img)
             points = []
             done = {'v': False}
@@ -323,27 +376,43 @@ def main():
                 save_now()
             cv2.setMouseCallback('BG Placement Profile Editor', lambda *a: None)
             continue
-        if cmd == 'min-' or k == ord('['):
+        if cmd_name == 'min-' or k == ord('['):
             item['min_scale'] = round(max(0.05, float(item.get('min_scale', 0.55)) - 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if k == ord(']'):
+        if cmd_name == 'min+' or k == ord(']'):
             item['min_scale'] = round(min(3.0, float(item.get('min_scale', 0.55)) + 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if cmd == 'max-' or k == ord('-'):
+        if cmd_name == 'max-' or k == ord('-'):
             item['max_scale'] = round(max(0.05, float(item.get('max_scale', 1.25)) - 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if cmd == 'max+' or k == ord('='):
+        if cmd_name == 'max+' or k == ord('='):
             item['max_scale'] = round(min(3.0, float(item.get('max_scale', 1.25)) + 0.05), 3)
             data['items'][key] = item
             save_now()
             continue
-        if cmd == 'save' or k == ord('s'):
+        if cmd_name == 'set_min' and isinstance(cmd, tuple) and len(cmd) > 1:
+            try:
+                item['min_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
+                data['items'][key] = item
+                save_now()
+            except Exception:
+                pass
+            continue
+        if cmd_name == 'set_max' and isinstance(cmd, tuple) and len(cmd) > 1:
+            try:
+                item['max_scale'] = round(min(3.0, max(0.05, float(cmd[1]))), 3)
+                data['items'][key] = item
+                save_now()
+            except Exception:
+                pass
+            continue
+        if cmd_name == 'save' or k == ord('s'):
             save_now()
             continue
 
