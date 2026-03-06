@@ -170,7 +170,7 @@ def extract_object_sample(data_root: Path, class_name: str):
     return None
 
 
-def launch_control_panel(cmd_q, state_q=None):
+def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     root = tk.Tk()
     root.title('BG Profile Controls')
     root.geometry('420x520')
@@ -196,23 +196,25 @@ def launch_control_panel(cmd_q, state_q=None):
     ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=2, sticky='we', pady=6)
 
     ttk.Label(frm, text='Current Background').grid(row=6, column=0, columnspan=2, sticky='w', padx=4)
-    current_bg_var = tk.StringVar(value='-')
-    ttk.Label(frm, textvariable=current_bg_var, wraplength=360).grid(row=7, column=0, columnspan=2, sticky='w', padx=4)
+    current_bg_lbl = ttk.Label(frm, text='-', wraplength=360)
+    current_bg_lbl.grid(row=7, column=0, columnspan=2, sticky='w', padx=4)
 
-    current_min_var = tk.StringVar(value='min=0.55')
-    current_max_var = tk.StringVar(value='max=1.25')
-    current_mode_var = tk.StringVar(value='mode=random')
-    ttk.Label(frm, textvariable=current_min_var).grid(row=8, column=0, sticky='w', padx=4)
-    ttk.Label(frm, textvariable=current_max_var).grid(row=8, column=1, sticky='w', padx=4)
-    ttk.Label(frm, textvariable=current_mode_var).grid(row=9, column=0, columnspan=2, sticky='w', padx=4)
+    current_min_lbl = ttk.Label(frm, text='min=0.55')
+    current_max_lbl = ttk.Label(frm, text='max=1.25')
+    current_mode_lbl = ttk.Label(frm, text='mode=random')
+    current_min_lbl.grid(row=8, column=0, sticky='w', padx=4)
+    current_max_lbl.grid(row=8, column=1, sticky='w', padx=4)
+    current_mode_lbl.grid(row=9, column=0, columnspan=2, sticky='w', padx=4)
 
     ttk.Label(frm, text='Set exact min/max scale').grid(row=10, column=0, columnspan=2, sticky='w', padx=4, pady=(6,2))
-    min_set_var = tk.StringVar(value='0.55')
-    max_set_var = tk.StringVar(value='1.25')
-    ttk.Entry(frm, textvariable=min_set_var, width=10).grid(row=11, column=0, sticky='w', padx=4)
-    ttk.Entry(frm, textvariable=max_set_var, width=10).grid(row=11, column=1, sticky='w', padx=4)
-    ttk.Button(frm, text='Apply Min', command=lambda: push(('set_min', min_set_var.get()))).grid(row=12, column=0, sticky='we', padx=4, pady=3)
-    ttk.Button(frm, text='Apply Max', command=lambda: push(('set_max', max_set_var.get()))).grid(row=12, column=1, sticky='we', padx=4, pady=3)
+    min_entry = ttk.Entry(frm, width=10)
+    max_entry = ttk.Entry(frm, width=10)
+    min_entry.insert(0, '0.55')
+    max_entry.insert(0, '1.25')
+    min_entry.grid(row=11, column=0, sticky='w', padx=4)
+    max_entry.grid(row=11, column=1, sticky='w', padx=4)
+    ttk.Button(frm, text='Apply Min', command=lambda: push(('set_min', min_entry.get()))).grid(row=12, column=0, sticky='we', padx=4, pady=3)
+    ttk.Button(frm, text='Apply Max', command=lambda: push(('set_max', max_entry.get()))).grid(row=12, column=1, sticky='we', padx=4, pady=3)
 
     ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=2, sticky='we', pady=6)
     ttk.Label(frm, text='Live Preview Mode').grid(row=14, column=0, columnspan=2, sticky='w', padx=4)
@@ -226,21 +228,37 @@ def launch_control_panel(cmd_q, state_q=None):
 
     ttk.Label(frm, text='Use mouse in image window:\nLeft click add corners\nRight click/Enter finish polygon').grid(row=19, column=0, columnspan=2, sticky='w', padx=4, pady=8)
 
+    last_bg = {'name': None}
+
     def sync_state():
+        if stop_evt is not None and stop_evt.is_set():
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            return
+
         if state_q is not None:
             try:
                 while True:
                     st = state_q.get_nowait()
-                    current_bg_var.set(st.get('bg', '-'))
-                    current_min_var.set(f"min={st.get('min_scale', 0.55):.3f}")
-                    current_max_var.set(f"max={st.get('max_scale', 1.25):.3f}")
-                    current_mode_var.set(f"mode={st.get('mode', 'pv_random')}")
-                    min_set_var.set(f"{st.get('min_scale', 0.55):.3f}")
-                    max_set_var.set(f"{st.get('max_scale', 1.25):.3f}")
+                    bg_name = st.get('bg', '-')
+                    current_bg_lbl.config(text=bg_name)
+                    current_min_lbl.config(text=f"min={st.get('min_scale', 0.55):.3f}")
+                    current_max_lbl.config(text=f"max={st.get('max_scale', 1.25):.3f}")
+                    current_mode_lbl.config(text=f"mode={st.get('mode', 'pv_random')}")
+                    # Only reset entry fields when image changes to avoid "jump back" while typing.
+                    if bg_name != last_bg['name']:
+                        min_entry.delete(0, 'end')
+                        min_entry.insert(0, f"{st.get('min_scale', 0.55):.3f}")
+                        max_entry.delete(0, 'end')
+                        max_entry.insert(0, f"{st.get('max_scale', 1.25):.3f}")
+                        last_bg['name'] = bg_name
             except Empty:
                 pass
         root.after(150, sync_state)
 
+    root.protocol('WM_DELETE_WINDOW', lambda: push('quit'))
     sync_state()
     frm.columnconfigure(0, weight=1)
     frm.columnconfigure(1, weight=1)
@@ -289,8 +307,10 @@ def main():
 
     cmd_q = Queue()
     state_q = Queue()
+    stop_evt = threading.Event()
+    th = None
     if args.control_window:
-        th = threading.Thread(target=launch_control_panel, args=(cmd_q, state_q), daemon=True)
+        th = threading.Thread(target=launch_control_panel, args=(cmd_q, state_q, stop_evt), daemon=False)
         th.start()
 
     idx = 0
@@ -455,6 +475,14 @@ def main():
         if cmd_name == 'save' or k == ord('s'):
             save_now()
             continue
+
+    stop_evt.set()
+    try:
+        cmd_q.put('quit')
+    except Exception:
+        pass
+    if th is not None:
+        th.join(timeout=1.5)
 
     cv2.destroyAllWindows()
     save_now()
