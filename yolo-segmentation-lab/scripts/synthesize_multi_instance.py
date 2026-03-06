@@ -207,6 +207,9 @@ def main():
     preview_frames = []
     target_n = args.preview_count if args.preview_only else args.num_synthetic
 
+    min_req = max(1, int(args.min_objects))
+    max_req = max(min_req, int(args.max_objects))
+
     made = 0
     for i in range(target_n):
         bg, bg_path = pick_random_background(bg_files)
@@ -240,11 +243,15 @@ def main():
             if isinstance(p, list) and len(p) >= 3:
                 poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in p]
 
-        nobj = random.randint(max(1, args.min_objects), max(args.min_objects, args.max_objects))
+        target_obj = random.randint(min_req, max_req)
 
         visible_masks = []
         centers = []
-        for _ in range(nobj):
+        attempts = 0
+        # Keep trying random cutouts until we either hit target or exhaust budget.
+        max_place_attempts = max(80, target_obj * 60)
+        while len(visible_masks) < target_obj and attempts < max_place_attempts:
+            attempts += 1
             cls_id, crop, crop_m = random.choice(cutouts)
             ch, cw = crop_m.shape[:2]
             if args.preview_mode == 'min_scale':
@@ -366,7 +373,8 @@ def main():
             if p is not None:
                 polys_new.append(p)
 
-        if not polys_new:
+        if len(polys_new) < min_req:
+            # enforce min objects per image strictly
             continue
 
         stem = f'{args.class_name}_synthmulti_{i + 1:06d}'
@@ -388,7 +396,7 @@ def main():
             cv2.drawContours(viz, [p.astype(np.int32).reshape(-1, 1, 2)], -1, col, 2)
         if poly_px is not None:
             cv2.polylines(viz, [np.array(poly_px, dtype=np.int32).reshape(-1, 1, 2)], True, (0, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(viz, f'instances={len(polys_new)} mode={args.preview_mode}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(viz, f'instances={len(polys_new)} target={target_obj} mode={args.preview_mode}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.imwrite(str(out_viz), viz)
 
         if args.preview_only:
