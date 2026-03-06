@@ -73,6 +73,11 @@ def profile_for_bg(args, bg_path):
     k2 = str(bg_path).replace('\\', '/')
     if k2 in items:
         return items[k2]
+    k2_low = k2.lower()
+    for kk, vv in items.items():
+        k_norm = str(kk).replace('\\', '/').lower()
+        if k_norm == k2_low or k_norm.endswith('/' + bg_path.name.lower()):
+            return vv
     return None
 
 
@@ -231,7 +236,14 @@ def main():
             obj_bri_min_eff = float(prof.get('obj_brightness_min', obj_bri_min_eff))
             obj_bri_max_eff = float(prof.get('obj_brightness_max', obj_bri_max_eff))
             if args.class_name and isinstance(prof.get('class_settings'), dict):
-                cs = prof['class_settings'].get(args.class_name, {})
+                cset = prof.get('class_settings', {})
+                cs = cset.get(args.class_name)
+                if cs is None:
+                    want = str(args.class_name).strip().lower()
+                    for ck, cv in cset.items():
+                        if str(ck).strip().lower() == want:
+                            cs = cv
+                            break
                 if isinstance(cs, dict):
                     min_scale_eff = float(cs.get('min_scale', min_scale_eff))
                     max_scale_eff = float(cs.get('max_scale', max_scale_eff))

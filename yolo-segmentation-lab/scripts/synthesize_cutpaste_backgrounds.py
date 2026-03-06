@@ -136,6 +136,12 @@ def profile_for_bg(args, bg_path):
     k2 = str(bg_path).replace('\\', '/')
     if k2 in items:
         return items[k2]
+    # Windows/path normalization fallback
+    k2_low = k2.lower()
+    for kk, vv in items.items():
+        k_norm = str(kk).replace('\\', '/').lower()
+        if k_norm == k2_low or k_norm.endswith('/' + k1.lower()):
+            return vv
     return None
 
 
@@ -165,7 +171,14 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     p_obj_min = prof.get('obj_brightness_min') if prof else None
     p_obj_max = prof.get('obj_brightness_max') if prof else None
     if prof and args.class_name and isinstance(prof.get('class_settings'), dict):
-        cs = prof['class_settings'].get(args.class_name, {})
+        cset = prof.get('class_settings', {})
+        cs = cset.get(args.class_name)
+        if cs is None:
+            want = str(args.class_name).strip().lower()
+            for ck, cv in cset.items():
+                if str(ck).strip().lower() == want:
+                    cs = cv
+                    break
         if isinstance(cs, dict):
             p_min_scale = cs.get('min_scale', p_min_scale)
             p_max_scale = cs.get('max_scale', p_max_scale)
