@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import subprocess
 import threading
 import tkinter as tk
@@ -129,6 +130,19 @@ class App(tk.Tk):
         if p:
             self.mesh_out_var.set(p)
 
+    def _resolve_splat_command(self):
+        # Prefer globally installed binary first.
+        splat = shutil.which('splat-transform')
+        if splat:
+            return [splat]
+
+        # Fallback to npx (Windows may expose npx.cmd).
+        npx = shutil.which('npx') or shutil.which('npx.cmd')
+        if npx:
+            return [npx, '@playcanvas/splat-transform']
+
+        return None
+
     def start_convert(self):
         if self.proc is not None:
             return
@@ -146,7 +160,27 @@ class App(tk.Tk):
         if out_dir and not os.path.isdir(out_dir):
             os.makedirs(out_dir, exist_ok=True)
 
-        cmd = ['npx', '@playcanvas/splat-transform', '-w', in_path, out_path]
+        lcc_dir = os.path.dirname(in_path)
+        companions = ['data.bin', 'index.bin']
+        missing = [f for f in companions if not os.path.exists(os.path.join(lcc_dir, f))]
+        if missing:
+            self.log_line(f'Warning: Missing companion files near LCC: {", ".join(missing)}')
+            self.log_line('Tip: Keep .lcc + data.bin + index.bin (+ assets folder) together in the same folder.')
+
+        base_cmd = self._resolve_splat_command()
+        if not base_cmd:
+            msg = (
+                'Could not find splat-transform or npx in PATH.\n\n'
+                'Fix:\n'
+                '1) Install Node.js LTS\n'
+                '2) Run: npm install -g @playcanvas/splat-transform\n'
+                '3) Reopen this GUI and try again.'
+            )
+            messagebox.showerror('Missing tool', msg)
+            self.log_line('Error: splat-transform/npx not found in PATH (WinError 2 root cause).')
+            return
+
+        cmd = [*base_cmd, '-w', in_path, out_path]
         self.log_line('> ' + ' '.join(f'"{c}"' if ' ' in c else c for c in cmd))
         self.status_var.set('Converting...')
         self.run_btn.config(state='disabled')
