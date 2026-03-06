@@ -139,6 +139,8 @@ def main():
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-count', type=int, default=12)
+    ap.add_argument('--preview-max-width', type=int, default=1600)
+    ap.add_argument('--preview-max-height', type=int, default=900)
     ap.add_argument('--preview-mode', default='random', choices=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'])
     ap.add_argument('--placement-profile', default='', help='JSON profile with per-background polygon/min_scale/max_scale')
     ap.add_argument('--seed', type=int, default=42)
@@ -396,6 +398,10 @@ def main():
         while True:
             show = preview_frames[idx].copy()
             cv2.putText(show, f'{idx+1}/{len(preview_frames)}', (12, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255,255,255), 2, cv2.LINE_AA)
+            h0, w0 = show.shape[:2]
+            s = min(args.preview_max_width / max(1, w0), args.preview_max_height / max(1, h0), 1.0)
+            if s < 1.0:
+                show = cv2.resize(show, (int(w0 * s), int(h0 * s)), interpolation=cv2.INTER_AREA)
             cv2.imshow(win, show)
             k = cv2.waitKey(0)
             if k in (ord('q'), 27):
