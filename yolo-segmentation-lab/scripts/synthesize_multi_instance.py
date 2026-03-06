@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import random
 from datetime import datetime
 from pathlib import Path
@@ -45,16 +46,47 @@ def mask_to_polygon(mask, eps=0.0008):
     return approx.reshape(-1, 2)
 
 
+def point_in_poly(x, y, poly_pts):
+    if poly_pts is None or len(poly_pts) < 3:
+        return True
+    contour = np.array(poly_pts, dtype=np.int32).reshape(-1, 1, 2)
+    return cv2.pointPolygonTest(contour, (float(x), float(y)), False) >= 0
+
+
+def bbox_fully_inside_poly(px, py, ow, oh, poly_pts):
+    if poly_pts is None or len(poly_pts) < 3:
+        return True
+    # strict containment: all bbox corners must be inside polygon
+    corners = [(px, py), (px + ow, py), (px, py + oh), (px + ow, py + oh)]
+    return all(point_in_poly(cx, cy, poly_pts) for cx, cy in corners)
+
+
+def profile_for_bg(args, bg_path):
+    if bg_path is None:
+        return None
+    prof = getattr(args, 'placement_profile_data', None)
+    if not prof:
+        return None
+    items = prof.get('items', {})
+    if bg_path.name in items:
+        return items[bg_path.name]
+    k2 = str(bg_path).replace('\\', '/')
+    if k2 in items:
+        return items[k2]
+    return None
+
+
 def pick_random_background(bg_files, max_dim=1920):
-    bg = cv2.imread(str(random.choice(bg_files)))
+    bg_path = random.choice(bg_files)
+    bg = cv2.imread(str(bg_path))
     if bg is None:
-        return np.full((1080, 1920, 3), 127, dtype=np.uint8)
+        return np.full((1080, 1920, 3), 127, dtype=np.uint8), None
     bh, bw = bg.shape[:2]
     md = max(bw, bh)
     if md > max_dim:
         s = max_dim / float(md)
         bg = cv2.resize(bg, (max(1, int(bw * s)), max(1, int(bh * s))), interpolation=cv2.INTER_AREA)
-    return bg.copy()
+    return bg.copy(), bg_path
 
 
 def rotate_bound_pair(img, mask, angle):
@@ -107,11 +139,22 @@ def main():
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-count', type=int, default=12)
+    ap.add_argument('--preview-mode', default='random', choices=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'])
+    ap.add_argument('--placement-profile', default='', help='JSON profile with per-background polygon/min_scale/max_scale')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
     random.seed(args.seed)
     np.random.seed(args.seed)
+
+    args.placement_profile_data = None
+    if args.placement_profile.strip():
+        p = Path(args.placement_profile)
+        if p.exists():
+            try:
+                args.placement_profile_data = json.loads(p.read_text(encoding='utf-8'))
+            except Exception as e:
+                print(f'Warning: failed reading placement profile: {e}')
 
     root = Path(args.data_root)
     src_img_dir = root / 'images' / args.class_name
@@ -164,8 +207,19 @@ def main():
 
     made = 0
     for i in range(target_n):
-        bg = pick_random_background(bg_files)
+        bg, bg_path = pick_random_background(bg_files)
         h, w = bg.shape[:2]
+
+        prof = profile_for_bg(args, bg_path)
+        min_scale_eff = float(args.min_scale)
+        max_scale_eff = float(args.max_scale)
+        poly_px = None
+        if isinstance(prof, dict):
+            min_scale_eff = float(prof.get('min_scale', min_scale_eff))
+            max_scale_eff = float(prof.get('max_scale', max_scale_eff))
+            p = prof.get('poly')
+            if isinstance(p, list) and len(p) >= 3:
+                poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in p]
 
         nobj = random.randint(max(1, args.min_objects), max(args.min_objects, args.max_objects))
 
@@ -174,7 +228,12 @@ def main():
         for _ in range(nobj):
             cls_id, crop, crop_m = random.choice(cutouts)
             ch, cw = crop_m.shape[:2]
-            scale = random.uniform(args.min_scale, args.max_scale)
+            if args.preview_mode == 'min_scale':
+                scale = min(min_scale_eff, max_scale_eff)
+            elif args.preview_mode == 'max_scale':
+                scale = max(min_scale_eff, max_scale_eff)
+            else:
+                scale = random.uniform(min(min_scale_eff, max_scale_eff), max(min_scale_eff, max_scale_eff))
             tw = max(8, int(cw * scale))
             th = max(8, int(ch * scale))
             c_r = cv2.resize(crop, (tw, th), interpolation=cv2.INTER_LINEAR)
@@ -220,6 +279,9 @@ def main():
                 else:
                     px = random.randint(0, w - ow)
                     py = random.randint(0, h - oh)
+
+                if poly_px is not None and not bbox_fully_inside_poly(px, py, ow, oh, poly_px):
+                    continue
 
                 cand = np.zeros((h, w), dtype=np.uint8)
                 cand[py:py + oh, px:px + ow][m_rr > 0] = 255
@@ -271,7 +333,12 @@ def main():
             if len(xs2) > 0:
                 centers.append((int(xs2.mean()), int(ys2.mean())))
 
-        bg_beta = random.uniform(args.brightness_min, args.brightness_max)
+        if args.preview_mode == 'bg_bri_min':
+            bg_beta = float(args.brightness_min)
+        elif args.preview_mode == 'bg_bri_max':
+            bg_beta = float(args.brightness_max)
+        else:
+            bg_beta = random.uniform(args.brightness_min, args.brightness_max)
         bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
 
         polys_new = []
@@ -289,11 +356,20 @@ def main():
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
         viz = bg.copy()
-        colors = [(255, 80, 80), (80, 255, 80), (80, 160, 255), (255, 220, 80), (255, 80, 220)]
+        colors = [(255, 80, 80), (80, 255, 80), (80, 160, 255), (255, 220, 80), (255, 80, 220), (120, 255, 255), (220, 120, 255)]
+        for j, vm in enumerate(visible_masks):
+            col = colors[j % len(colors)]
+            # translucent per-instance mask fill
+            tint = np.zeros_like(viz)
+            tint[:, :] = col
+            aa = vm > 0
+            viz[aa] = cv2.addWeighted(viz[aa], 0.55, tint[aa], 0.45, 0)
         for j, p in enumerate(polys_new):
             col = colors[j % len(colors)]
             cv2.drawContours(viz, [p.astype(np.int32).reshape(-1, 1, 2)], -1, col, 2)
-        cv2.putText(viz, f'instances={len(polys_new)}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+        if poly_px is not None:
+            cv2.polylines(viz, [np.array(poly_px, dtype=np.int32).reshape(-1, 1, 2)], True, (0, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(viz, f'instances={len(polys_new)} mode={args.preview_mode}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.imwrite(str(out_viz), viz)
 
         if args.preview_only:
