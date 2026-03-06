@@ -181,6 +181,13 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     def push(c):
         cmd_q.put(c)
 
+    def request_quit():
+        push('quit')
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
     tk.Button(frm, text='Prev (p)', command=lambda: push('prev'), bg='#374151', fg='white', activebackground='#4b5563').grid(row=0, column=0, sticky='we', padx=4, pady=4)
     tk.Button(frm, text='Next (n)', command=lambda: push('next'), bg='#374151', fg='white', activebackground='#4b5563').grid(row=0, column=1, sticky='we', padx=4, pady=4)
     tk.Button(frm, text='Draw Polygon (r)', command=lambda: push('draw'), bg='#0f766e', fg='white', activebackground='#0d9488').grid(row=1, column=0, columnspan=2, sticky='we', padx=4, pady=4)
@@ -191,7 +198,7 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
     tk.Button(frm, text='Max + (=)', command=lambda: push('max+'), bg='#1d4ed8', fg='white', activebackground='#2563eb').grid(row=3, column=1, sticky='we', padx=4, pady=4)
 
     tk.Button(frm, text='Save (s)', command=lambda: push('save'), bg='#065f46', fg='white', activebackground='#047857').grid(row=4, column=0, sticky='we', padx=4, pady=4)
-    tk.Button(frm, text='Quit (q)', command=lambda: push('quit'), bg='#7f1d1d', fg='white', activebackground='#991b1b').grid(row=4, column=1, sticky='we', padx=4, pady=4)
+    tk.Button(frm, text='Quit (q)', command=request_quit, bg='#7f1d1d', fg='white', activebackground='#991b1b').grid(row=4, column=1, sticky='we', padx=4, pady=4)
 
     ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=2, sticky='we', pady=6)
 
@@ -284,7 +291,7 @@ def launch_control_panel(cmd_q, state_q=None, stop_evt=None):
                 pass
         root.after(150, sync_state)
 
-    root.protocol('WM_DELETE_WINDOW', lambda: push('quit'))
+    root.protocol('WM_DELETE_WINDOW', request_quit)
     sync_state()
     frm.columnconfigure(0, weight=1)
     frm.columnconfigure(1, weight=1)
