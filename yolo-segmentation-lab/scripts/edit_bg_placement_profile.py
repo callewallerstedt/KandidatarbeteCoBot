@@ -34,7 +34,7 @@ def bbox_fully_inside_poly(px, py, ow, oh, poly_pts):
     return all(point_in_poly(cx, cy, poly_pts) for cx, cy in corners)
 
 
-def render_live_preview(bg, item, sample_obj, mode, args):
+def render_live_preview(bg, item, sample_obj, mode, args, fixed_params=None):
     if sample_obj is None:
         return None
     obj_crop, obj_mask = sample_obj
@@ -43,21 +43,30 @@ def render_live_preview(bg, item, sample_obj, mode, args):
 
     min_s = float(item.get('min_scale', 0.55))
     max_s = float(item.get('max_scale', 1.25))
-    if mode == 'pv_obj_scale_min':
+    if fixed_params is None:
+        fixed_params = {}
+
+    if 'scale' in fixed_params:
+        scale = float(fixed_params['scale'])
+    elif mode == 'pv_obj_scale_min':
         scale = min_s
     elif mode == 'pv_obj_scale_max':
         scale = max_s
     else:
         scale = float(np.random.uniform(min(min_s, max_s), max(min_s, max_s)))
 
-    if mode == 'pv_bg_bri_min':
+    if 'bgb' in fixed_params:
+        bgb = float(fixed_params['bgb'])
+    elif mode == 'pv_bg_bri_min':
         bgb = float(args.bg_brightness_min)
     elif mode == 'pv_bg_bri_max':
         bgb = float(args.bg_brightness_max)
     else:
         bgb = float(np.random.uniform(args.bg_brightness_min, args.bg_brightness_max))
 
-    if mode == 'pv_obj_bri_min':
+    if 'objb' in fixed_params:
+        objb = float(fixed_params['objb'])
+    elif mode == 'pv_obj_bri_min':
         objb = float(args.obj_brightness_min)
     elif mode == 'pv_obj_bri_max':
         objb = float(args.obj_brightness_max)
@@ -81,15 +90,31 @@ def render_live_preview(bg, item, sample_obj, mode, args):
         miny, maxy = max(0, min(ys)), min(h - oh, max(ys))
         px = max(0, min(w - ow, minx))
         py = max(0, min(h - oh, miny))
-        for _ in range(60):
-            tx = np.random.randint(minx, maxx + 1) if maxx >= minx else px
-            ty = np.random.randint(miny, maxy + 1) if maxy >= miny else py
+        if 'px' in fixed_params and 'py' in fixed_params:
+            tx, ty = int(fixed_params['px']), int(fixed_params['py'])
             if bbox_fully_inside_poly(tx, ty, ow, oh, poly_px):
-                px, py = int(tx), int(ty)
-                break
+                px, py = tx, ty
+            else:
+                for _ in range(60):
+                    tx = np.random.randint(minx, maxx + 1) if maxx >= minx else px
+                    ty = np.random.randint(miny, maxy + 1) if maxy >= miny else py
+                    if bbox_fully_inside_poly(tx, ty, ow, oh, poly_px):
+                        px, py = int(tx), int(ty)
+                        break
+        else:
+            for _ in range(60):
+                tx = np.random.randint(minx, maxx + 1) if maxx >= minx else px
+                ty = np.random.randint(miny, maxy + 1) if maxy >= miny else py
+                if bbox_fully_inside_poly(tx, ty, ow, oh, poly_px):
+                    px, py = int(tx), int(ty)
+                    break
     else:
-        px = np.random.randint(0, max(1, w - ow + 1))
-        py = np.random.randint(0, max(1, h - oh + 1))
+        if 'px' in fixed_params and 'py' in fixed_params:
+            px = int(np.clip(int(fixed_params['px']), 0, max(0, w - ow)))
+            py = int(np.clip(int(fixed_params['py']), 0, max(0, h - oh)))
+        else:
+            px = np.random.randint(0, max(1, w - ow + 1))
+            py = np.random.randint(0, max(1, h - oh + 1))
 
     roi = out[py:py+oh, px:px+ow]
     aa = m > 0
@@ -99,7 +124,7 @@ def render_live_preview(bg, item, sample_obj, mode, args):
     if poly_px:
         cv2.polylines(out, [np.array(poly_px, dtype=np.int32).reshape(-1, 1, 2)], True, (0,255,255), 2, cv2.LINE_AA)
     cv2.putText(out, f'{mode} scale={scale:.2f} bgb={bgb:.0f} objb={objb:.0f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2, cv2.LINE_AA)
-    return out
+    return out, {'scale': scale, 'bgb': bgb, 'objb': objb, 'px': int(px), 'py': int(py)}
 
 
 def parse_yolo_polygon(label_path, w, h):
@@ -260,6 +285,7 @@ def main():
         sample_obj = extract_object_sample(Path(args.data_root), args.class_name.strip())
 
     preview_mode = 'pv_random'
+    preview_cache = {'key': None, 'params': None}
 
     cmd_q = Queue()
     state_q = Queue()
@@ -305,9 +331,21 @@ def main():
         cv2.putText(disp, 'n/p next-prev | r draw polygon | [/ ] min -/+ | -/= max -/+ | s save | q quit', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,255), 2, cv2.LINE_AA)
 
         cv2.imshow('BG Placement Profile Editor', disp)
-        live = render_live_preview(img, item, sample_obj, preview_mode, args)
+
+        cache_key = (
+            fp.name,
+            preview_mode,
+            round(float(item.get('min_scale', 0.55)), 4),
+            round(float(item.get('max_scale', 1.25)), 4),
+            tuple(item.get('poly', [])) if isinstance(item.get('poly'), list) else None,
+        )
+        fixed_params = preview_cache['params'] if preview_cache['key'] == cache_key else None
+        live = render_live_preview(img, item, sample_obj, preview_mode, args, fixed_params=fixed_params)
         if live is not None:
-            live_show, _ = fit(live, 1600, 900)
+            live_img, used_params = live
+            preview_cache['key'] = cache_key
+            preview_cache['params'] = used_params
+            live_show, _ = fit(live_img, 1600, 900)
             cv2.imshow('BG Live Component Preview', live_show)
 
         # Non-blocking key read to support optional control window queue.
@@ -322,6 +360,8 @@ def main():
 
         if cmd_name in {'pv_obj_scale_min','pv_obj_scale_max','pv_obj_bri_min','pv_obj_bri_max','pv_bg_bri_min','pv_bg_bri_max','pv_random'}:
             preview_mode = cmd_name
+            preview_cache['key'] = None
+            preview_cache['params'] = None
             continue
 
         if cmd_name == 'quit' or k in (ord('q'), 27):
