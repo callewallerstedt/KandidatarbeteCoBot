@@ -104,6 +104,8 @@ def find_mask_for_rgb(rgb_path: Path, rgb_dir: Path, mask_idx: dict):
 
 
 def main():
+    from profile_scene_builders import next_output_index as core_next_output_index
+
     ap = argparse.ArgumentParser(description='Import Unity RGB + red mask pairs into YOLO-seg dataset format.')
     ap.add_argument('--unity-dir', default='')
     ap.add_argument('--rgb-dir', default='')
@@ -141,6 +143,8 @@ def main():
         raise RuntimeError('No RGB images found')
 
     mask_idx = build_mask_index(mask_dir)
+    stem_prefix = f'{args.class_name}_unity'
+    next_idx = core_next_output_index(out_img_dir, stem_prefix)
 
     made = 0
     missed = 0
@@ -163,7 +167,7 @@ def main():
         if poly is None:
             continue
 
-        stem = f'{args.class_name}_unity_{i:06d}'
+        stem = f'{stem_prefix}_{next_idx + made:06d}'
         out_img = out_img_dir / f'{stem}.jpg'
         out_lbl = out_lbl_dir / f'{stem}.txt'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'

@@ -2,7 +2,9 @@ path: data/yolo_dataset
 train: images/train
 val: images/val
 test: images/test
-
-# Will be generated/updated by scripts/update_dataset_yaml.py
 names:
   0: object_placeholder
+  1: Skruv
+  2: Snusdosa
+  3: hammer
+  4: object_name

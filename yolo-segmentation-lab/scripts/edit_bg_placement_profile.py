@@ -140,7 +140,7 @@ def parse_yolo_polygon(label_path, w, h):
     return np.round(pts).astype(np.int32)
 
 
-def get_item(data, fp, bg_dir=None):
+def get_item(data, fp, bg_dir=None, default_min_scale=0.55, default_max_scale=1.25):
     key_abs = str(fp).replace('\\', '/')
     key_name = fp.name
     key_rel = None
@@ -166,14 +166,28 @@ def get_item(data, fp, bg_dir=None):
         if kn == key_abs_low or (key_rel_low and (kn == key_rel_low or kn.endswith('/' + key_rel_low))):
             return k, v
 
-    return (key_rel or key_abs), {'rect': [0.0, 0.0, 1.0, 1.0], 'min_scale': 0.55, 'max_scale': 1.25}
+    return (
+        key_rel or key_abs,
+        {
+            'rect': [0.0, 0.0, 1.0, 1.0],
+            'min_scale': float(default_min_scale),
+            'max_scale': float(default_max_scale),
+        },
+    )
 
 
-def get_effective_scales(item, class_name: str):
-    base_min = float(item.get('min_scale', 0.55))
-    base_max = float(item.get('max_scale', 1.25))
+def get_effective_scales(item, class_name: str, defaults=(0.55, 1.25)):
+    base_min = float(item.get('min_scale', defaults[0]))
+    base_max = float(item.get('max_scale', defaults[1]))
     if class_name and isinstance(item.get('class_settings'), dict):
         cs = item['class_settings'].get(class_name, {})
+        if not isinstance(cs, dict):
+            want = str(class_name).strip().lower()
+            cs = {}
+            for ck, cv in item['class_settings'].items():
+                if str(ck).strip().lower() == want and isinstance(cv, dict):
+                    cs = cv
+                    break
         base_min = float(cs.get('min_scale', base_min))
         base_max = float(cs.get('max_scale', base_max))
     return base_min, base_max
@@ -201,6 +215,13 @@ def get_effective_brightness(item, class_name: str, defaults):
     obj_max = float(item.get('obj_brightness_max', defaults[3]))
     if class_name and isinstance(item.get('class_settings'), dict):
         cs = item['class_settings'].get(class_name, {})
+        if not isinstance(cs, dict):
+            want = str(class_name).strip().lower()
+            cs = {}
+            for ck, cv in item['class_settings'].items():
+                if str(ck).strip().lower() == want and isinstance(cv, dict):
+                    cs = cv
+                    break
         if isinstance(cs, dict):
             bg_min = float(cs.get('bg_brightness_min', bg_min))
             bg_max = float(cs.get('bg_brightness_max', bg_max))
@@ -406,6 +427,8 @@ def main():
     ap.add_argument('--control-window', action='store_true', help='Open a small Tk control window with clickable buttons')
     ap.add_argument('--class-name', default='')
     ap.add_argument('--data-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
+    ap.add_argument('--min-scale', type=float, default=0.55)
+    ap.add_argument('--max-scale', type=float, default=1.25)
     ap.add_argument('--bg-brightness-min', type=float, default=-20)
     ap.add_argument('--bg-brightness-max', type=float, default=20)
     ap.add_argument('--obj-brightness-min', type=float, default=-15)
@@ -451,8 +474,8 @@ def main():
     idx = 0
     while True:
         fp = files[idx]
-        key, item_raw = get_item(data, fp, bg_dir)
-        eff_min, eff_max = get_effective_scales(item_raw, scope_class)
+        key, item_raw = get_item(data, fp, bg_dir, args.min_scale, args.max_scale)
+        eff_min, eff_max = get_effective_scales(item_raw, scope_class, (args.min_scale, args.max_scale))
         dflt_bri = (args.bg_brightness_min, args.bg_brightness_max, args.obj_brightness_min, args.obj_brightness_max)
         eff_bg_min, eff_bg_max, eff_obj_min, eff_obj_max = get_effective_brightness(item_raw, scope_class, dflt_bri)
         item = dict(item_raw)

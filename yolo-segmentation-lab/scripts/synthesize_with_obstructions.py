@@ -122,6 +122,8 @@ def pick_boundary_point(obj_mask, center, d_unit):
 
 
 def main():
+    from profile_scene_builders import next_output_index as core_next_output_index
+
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
@@ -187,6 +189,8 @@ def main():
 
     preview_frames = []
     target_n = args.preview_count if args.preview_only else args.num_synthetic
+    stem_prefix = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}'
+    next_idx = core_next_output_index(out_viz_dir if args.preview_only else out_img_dir, stem_prefix)
 
     made = 0
     for i in range(target_n):
@@ -309,7 +313,7 @@ def main():
         if poly_new is None:
             continue
 
-        stem = f'{args.class_name}_{"obs_preview" if args.preview_only else "obs"}_{i + 1:06d}'
+        stem = f'{stem_prefix}_{next_idx + made:06d}'
         ov = base.copy()
         cv2.drawContours(ov, [poly_new.astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
 

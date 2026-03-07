@@ -130,33 +130,35 @@ def profile_for_bg(args, bg_path):
     if not prof:
         return None
     items = prof.get('items', {})
-    k1 = bg_path.name
-    if k1 in items:
-        return items[k1]
-
     k_abs = str(bg_path).replace('\\', '/')
-    if k_abs in items:
-        return items[k_abs]
-
+    k1 = bg_path.name
+    k_rel = None
     try:
         k_rel = str(bg_path.relative_to(Path(args.background_dir))).replace('\\', '/')
         if k_rel in items:
             return items[k_rel]
     except Exception:
-        k_rel = None
+        pass
+
+    if k_abs in items:
+        return items[k_abs]
+
+    if k1 in items:
+        return items[k1]
 
     # Windows/path normalization fallback
     k_abs_low = k_abs.lower()
     k_rel_low = k_rel.lower() if k_rel else None
     for kk, vv in items.items():
         k_norm = str(kk).replace('\\', '/').lower()
-        if k_norm == k_abs_low or (k_rel_low and (k_norm == k_rel_low or k_norm.endswith('/' + k_rel_low))) or k_norm.endswith('/' + k1.lower()):
+        if k_rel_low and (k_norm == k_rel_low or k_norm.endswith('/' + k_rel_low)):
+            return vv
+        if k_norm == k_abs_low or k_norm.endswith('/' + k1.lower()):
             return vv
     return None
 
 
-def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fixed_obj_beta=None):
-    im_path, lb_path = random.choice(pairs)
+def extract_crop_from_pair(im_path: Path, lb_path: Path):
     src = cv2.imread(str(im_path))
     if src is None:
         return None
@@ -164,11 +166,26 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     cls_id, poly = load_yolo_polygon(lb_path, src_w, src_h)
     if poly is None:
         return None
-
     mask = poly_to_mask(poly, src_w, src_h)
     x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
     crop = src[y:y + bh, x:x + bw]
     crop_mask = mask[y:y + bh, x:x + bw]
+    if crop.size == 0 or crop_mask.size == 0:
+        return None
+    return cls_id, crop, crop_mask
+
+
+def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fixed_obj_beta=None):
+    if getattr(args, 'preview_only', False) and getattr(args, 'preview_pair', None) is not None:
+        im_path, lb_path = args.preview_pair
+    else:
+        im_path, lb_path = random.choice(pairs)
+    crop_info = extract_crop_from_pair(im_path, lb_path)
+    if crop_info is None:
+        return None
+    cls_id, crop, crop_mask = crop_info
+    bw = crop.shape[1]
+    bh = crop.shape[0]
 
     bg, bg_path = pick_random_background(bg_files)
     h, w = bg.shape[:2]
@@ -200,7 +217,10 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
     smin = p_min_scale if p_min_scale is not None else args.min_scale
     smax = p_max_scale if p_max_scale is not None else args.max_scale
 
-    scale = fixed_scale if fixed_scale is not None else random.uniform(min(smin, smax), max(smin, smax))
+    requested_scale = fixed_scale if fixed_scale is not None else random.uniform(min(smin, smax), max(smin, smax))
+    source_long = float(max(1, max(bw, bh)))
+    reference_long = float(getattr(args, 'reference_long_side', source_long) or source_long)
+    scale = requested_scale * (reference_long / source_long)
     angle = random.uniform(-args.max_rotation, args.max_rotation)
     tw = max(8, int(bw * scale))
     th = max(8, int(bh * scale))
@@ -294,13 +314,19 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
         'w': w,
         'h': h,
         'cls_id': args.class_id if cls_id is None else cls_id,
-        'scale': scale,
+        'scale': requested_scale,
+        'applied_scale': scale,
         'bg_beta': bg_beta,
         'obj_beta': obj_beta,
     }
 
 
 def main():
+    from profile_scene_builders import build_single_scene as core_build_single_scene
+    from profile_scene_builders import collect_cutouts as core_collect_cutouts
+    from profile_scene_builders import load_profile as core_load_profile
+    from profile_scene_builders import next_output_index as core_next_output_index
+
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
@@ -314,6 +340,10 @@ def main():
     ap.add_argument('--brightness-max', type=float, default=20.0, help='Background brightness max shift (beta)')
     ap.add_argument('--object-brightness-min', type=float, default=-10.0, help='Object brightness min shift (beta)')
     ap.add_argument('--object-brightness-max', type=float, default=10.0, help='Object brightness max shift (beta)')
+    ap.add_argument('--object-temp-bias', type=float, default=0.35, help='Object temperature bias: -1 cooler, +1 warmer')
+    ap.add_argument('--object-temp-variance', type=float, default=0.18, help='Random object temperature variance around the bias')
+    ap.add_argument('--object-shade-prob', type=float, default=0.45, help='Probability of partial one-sided shading per object')
+    ap.add_argument('--object-shade-strength', type=float, default=0.22, help='Strength of partial object shading')
     ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
@@ -325,13 +355,14 @@ def main():
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
 
+    args.preview_mode = 'random'
     args.placement_rect_norm = parse_rect_norm(args.placement_rect)
     args.placement_profile_data = None
     if args.placement_profile.strip():
         p = Path(args.placement_profile)
         if p.exists():
             try:
-                args.placement_profile_data = json.loads(p.read_text(encoding='utf-8'))
+                args.placement_profile_data = json.loads(p.read_text(encoding='utf-8-sig'))
             except Exception as e:
                 print(f'Warning: failed reading placement profile: {e}')
 
@@ -371,6 +402,19 @@ def main():
     if not pairs:
         raise RuntimeError(f'No source image-label pairs found for class={args.class_name}')
 
+    args.reference_long_side = None
+    args.preview_pair = None
+    for im, lb in pairs:
+        crop_info = extract_crop_from_pair(im, lb)
+        if crop_info is None:
+            continue
+        _, crop, _ = crop_info
+        args.reference_long_side = float(max(1, max(crop.shape[1], crop.shape[0])))
+        args.preview_pair = (im, lb)
+        break
+    if args.reference_long_side is None:
+        raise RuntimeError(f'No valid source cutouts found for class={args.class_name}')
+
     if args.preview_only:
         previews = []
         specs = [
@@ -390,7 +434,7 @@ def main():
                 continue
             vis = sample['image'].copy()
             cv2.drawContours(vis, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-            cv2.putText(vis, f'{label} scale={sample["scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(vis, f'{label} requested={sample["scale"]:.2f} applied={sample["applied_scale"]:.2f}', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(vis, f'scale range={args.min_scale:.2f}..{args.max_scale:.2f}', (12, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(vis, f'bg beta={args.brightness_min:.0f}..{args.brightness_max:.0f} obj beta={args.object_brightness_min:.0f}..{args.object_brightness_max:.0f}', (12, 84), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2, cv2.LINE_AA)
             previews.append(vis)
@@ -437,27 +481,33 @@ def main():
         print('Preview-only mode: no training images/labels written.')
         return
 
+    if not args.placement_profile.strip():
+        raise RuntimeError('placement_profile is required for synthetic generation')
+    profile_data = core_load_profile(Path(args.placement_profile))
+    cutouts = core_collect_cutouts(root, args.class_name)
+    reference_long_side = float(cutouts[0]['long_side'])
+
     made = 0
-    for i in range(args.num_synthetic):
-        sample = None
-        for _ in range(20):
-            sample = compose_once(pairs, bg_files, args)
-            if sample is not None:
-                break
-        if sample is None:
+    stem_prefix = f'{args.class_name}_synth'
+    next_idx = core_next_output_index(out_img_dir, stem_prefix)
+    while made < args.num_synthetic:
+        scene = core_build_single_scene(args, bg_files, profile_data, cutouts, reference_long_side)
+        if scene is None:
             continue
 
-        stem = f'{args.class_name}_synth_{i + 1:06d}'
+        poly = mask_to_polygon(scene['mask'])
+        if poly is None:
+            continue
+
+        stem = f'{stem_prefix}_{next_idx + made:06d}'
         out_img = out_img_dir / f'{stem}.jpg'
         out_lbl = out_lbl_dir / f'{stem}.txt'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
-        cv2.imwrite(str(out_img), sample['image'])
-        write_yolo(out_lbl, sample['cls_id'], sample['poly'], sample['w'], sample['h'])
-
-        ov = sample['image'].copy()
-        cv2.drawContours(ov, [sample['poly'].astype(np.int32).reshape(-1, 1, 2)], -1, (0, 255, 0), 2)
-        cv2.imwrite(str(out_viz), ov)
+        h, w = scene['image'].shape[:2]
+        cv2.imwrite(str(out_img), scene['image'])
+        write_yolo(out_lbl, args.class_id, poly, w, h)
+        cv2.imwrite(str(out_viz), scene['overlay'])
         made += 1
 
     print(f'Synthetic created: {made}')

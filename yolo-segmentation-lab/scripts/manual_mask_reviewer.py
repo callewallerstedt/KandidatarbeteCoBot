@@ -4,6 +4,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import tkinter as tk
 
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
 
@@ -49,6 +50,47 @@ def save_label(path: Path, cid: int, poly: np.ndarray, w: int, h: int):
     path.write_text(' '.join(vals) + '\n', encoding='utf-8')
 
 
+def compute_fit_zoom(img_w: int, img_h: int, screen_w: int, screen_h: int):
+    avail_w = max(200, screen_w - 140)
+    avail_h = max(200, screen_h - 180)
+    return max(0.2, min(avail_w / max(1, img_w), avail_h / max(1, img_h), 1.0))
+
+
+def auto_mask_grabcut(img, seed_mask=None):
+    h, w = img.shape[:2]
+    mask = np.zeros((h, w), np.uint8)
+    bgd = np.zeros((1, 65), np.float64)
+    fgd = np.zeros((1, 65), np.float64)
+
+    if seed_mask is not None and int((seed_mask > 0).sum()) > 20:
+        ys, xs = np.where(seed_mask > 0)
+        x1 = max(0, int(xs.min()) - 12)
+        y1 = max(0, int(ys.min()) - 12)
+        x2 = min(w - 1, int(xs.max()) + 12)
+        y2 = min(h - 1, int(ys.max()) + 12)
+        rect = (x1, y1, max(2, x2 - x1), max(2, y2 - y1))
+
+        gc_mask = np.full((h, w), cv2.GC_BGD, dtype=np.uint8)
+        gc_mask[seed_mask > 0] = cv2.GC_PR_FGD
+        core = cv2.erode((seed_mask > 0).astype(np.uint8) * 255, np.ones((7, 7), np.uint8), iterations=1)
+        gc_mask[core > 0] = cv2.GC_FGD
+        cv2.grabCut(img, gc_mask, rect, bgd, fgd, 4, cv2.GC_INIT_WITH_MASK)
+        mask = np.where((gc_mask == cv2.GC_FGD) | (gc_mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+    else:
+        rect = (
+            max(1, int(0.18 * w)),
+            max(1, int(0.12 * h)),
+            max(2, int(0.64 * w)),
+            max(2, int(0.76 * h)),
+        )
+        cv2.grabCut(img, mask, rect, bgd, fgd, 4, cv2.GC_INIT_WITH_RECT)
+        mask = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    return mask
+
+
 def main():
     ap = argparse.ArgumentParser(description='Manual mask reviewer/editor (smooth draw + zoom)')
     ap.add_argument('--class-name', required=True)
@@ -56,6 +98,7 @@ def main():
     ap.add_argument('--data-root', default=str(Path(__file__).resolve().parents[1] / 'data'))
     ap.add_argument('--contains', default='manual_', help='Only review filenames containing this token')
     ap.add_argument('--brush', type=int, default=16)
+    ap.add_argument('--auto-init', action='store_true', help='Auto-refine/init mask with GrabCut on each frame')
     args = ap.parse_args()
 
     root = Path(args.data_root)
@@ -72,6 +115,12 @@ def main():
     brush = max(1, args.brush)
     mode = 'add'
     zoom = 1.0
+
+    tk_root = tk.Tk()
+    tk_root.withdraw()
+    screen_w = int(tk_root.winfo_screenwidth() or 1920)
+    screen_h = int(tk_root.winfo_screenheight() or 1080)
+    tk_root.destroy()
 
     win = 'Manual Mask Reviewer'
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -119,10 +168,18 @@ def main():
 
         h, w = img.shape[:2]
         state['img_shape'] = (h, w)
+        zoom = compute_fit_zoom(w, h, screen_w, screen_h)
         cid, poly = load_label(lbl_path, w, h)
         if cid is None:
             cid = args.class_id
         mask0 = mask_from_poly(poly, w, h)
+        if args.auto_init:
+            try:
+                auto_mask = auto_mask_grabcut(img, mask0 if int((mask0 > 0).sum()) > 20 else None)
+                if int((auto_mask > 0).sum()) > 20:
+                    mask0 = auto_mask
+            except Exception:
+                pass
         state['mask'] = mask0.copy()
 
         while True:
@@ -135,7 +192,7 @@ def main():
 
             info = (
                 f'{idx+1}/{len(files)} mode={mode} brush={brush} zoom={zoom:.1f} | '
-                'draw LMB, a/e add-erase, +/- brush, z/x zoom, s save, n/p next-prev, r reset, q quit'
+                'draw LMB, a/e add-erase, +/- brush, z/x zoom, s save, n/p next-prev, i auto-mask, r reset, q quit'
             )
             cv2.putText(overlay, info, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
 
@@ -143,6 +200,7 @@ def main():
                 disp = cv2.resize(overlay, (int(w * zoom), int(h * zoom)), interpolation=cv2.INTER_LINEAR)
             else:
                 disp = overlay
+            cv2.resizeWindow(win, disp.shape[1], disp.shape[0])
             cv2.imshow(win, disp)
 
             k = cv2.waitKey(1) & 0xFF
@@ -163,6 +221,13 @@ def main():
                 zoom = max(0.5, zoom - 0.2)
             elif k == ord('r'):
                 state['mask'] = mask0.copy()
+            elif k == ord('i'):
+                try:
+                    refreshed = auto_mask_grabcut(img, state['mask'])
+                    if int((refreshed > 0).sum()) > 20:
+                        state['mask'] = refreshed
+                except Exception:
+                    pass
             elif k == ord('s'):
                 poly_new = mask_to_polygon(state['mask'])
                 if poly_new is not None:

@@ -2,3 +2,19 @@
 # Python cache
 __pycache__/
 *.pyc
+
+# Local YOLO lab artifacts
+yolo-segmentation-lab/.venv/
+yolo-segmentation-lab/.ui_state.json
+yolo-segmentation-lab/data/
+yolo-segmentation-lab/unity output/
+yolo-segmentation-lab/yolo*.pt
+
+# Keep train metrics and weights, but ignore visual outputs
+yolo-segmentation-lab/runs/**/*.jpg
+yolo-segmentation-lab/runs/**/*.jpeg
+yolo-segmentation-lab/runs/**/*.png
+yolo-segmentation-lab/runs/**/*.bmp
+yolo-segmentation-lab/runs/**/*.gif
+yolo-segmentation-lab/runs/**/*.webp
+yolo-segmentation-lab/runs/**/*.mp4

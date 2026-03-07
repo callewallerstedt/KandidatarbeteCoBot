@@ -6,11 +6,13 @@ import numpy as np
 from ultralytics import YOLO
 import cv2
 
+IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--weights', required=True)
-    ap.add_argument('--source', default='0', help='0 for webcam, or video path')
+    ap.add_argument('--source', default='0', help='0 for webcam, or video/image path')
     ap.add_argument('--imgsz', type=int, default=1280)
     ap.add_argument('--conf', type=float, default=0.25)
     ap.add_argument('--device', default='0')
@@ -53,6 +55,11 @@ def main():
         (255, 90, 220),
         (90, 255, 255),
     ]
+
+    def is_image_source(src):
+        if not isinstance(src, str):
+            return False
+        return Path(src).suffix.lower() in IMG_EXTS
 
     def smooth_polygon(poly, smooth_strength):
         if smooth_strength <= 0 or poly is None or len(poly) < 5:
@@ -121,6 +128,15 @@ def main():
         if count == 0 and r.boxes is not None and len(r.boxes) > 0:
             cv2.putText(frame, 'Warning: boxes detected but no seg masks', (12, 62), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 180, 255), 2, cv2.LINE_AA)
         return frame, count
+
+    def add_controls_overlay(frame, mode_text, paused=False):
+        out = frame.copy()
+        controls = 'q/esc quit | space pause/play | n next frame | j/k -/+30 frames'
+        cv2.putText(out, mode_text, (12, out.shape[0] - 38), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(out, controls, (12, out.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 2, cv2.LINE_AA)
+        if paused:
+            cv2.putText(out, 'PAUSED', (12, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 220, 255), 2, cv2.LINE_AA)
+        return out
 
     def draw_grip_overlay(frame, grip_r):
         if grip_r is None or grip_r.keypoints is None:
@@ -217,7 +233,20 @@ def main():
         cv2.addWeighted(thick, max(0.0, min(1.0, args.human_alpha)), out, 1.0 - max(0.0, min(1.0, args.human_alpha)), 0.0, out)
         return out
 
-    def show_and_maybe_save(frame):
+    def save_single_image(frame):
+        save_path = Path(args.save_path) if args.save_path.strip() else None
+        if save_path is None:
+            out_dir = Path(__file__).resolve().parents[1] / 'runs' / 'predict_overlay'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            save_path = out_dir / f'overlay_{ts}.jpg'
+        elif save_path.suffix.lower() not in IMG_EXTS:
+            save_path = save_path.with_suffix('.jpg')
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(save_path), frame)
+        print(f'Saved overlay image: {save_path}')
+
+    def show_and_maybe_save(frame, wait_ms=1):
         nonlocal writer, save_path
         h, w = frame.shape[:2]
         scale = min(args.view_width / max(w, 1), args.view_height / max(h, 1), 1.0)
@@ -225,21 +254,39 @@ def main():
             frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
         if args.save_video:
-            if writer is None:
-                if args.save_path.strip():
-                    save_path = Path(args.save_path)
-                else:
-                    out_dir = Path(__file__).resolve().parents[1] / 'runs' / 'predict_overlay'
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    save_path = out_dir / f'overlay_{ts}.mp4'
-                save_path.parent.mkdir(parents=True, exist_ok=True)
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                writer = cv2.VideoWriter(str(save_path), fourcc, max(args.save_fps, 1.0), (frame.shape[1], frame.shape[0]))
-            writer.write(frame)
+            if is_image_source(args.source):
+                save_single_image(frame)
+            else:
+                if writer is None:
+                    if args.save_path.strip():
+                        save_path = Path(args.save_path)
+                    else:
+                        out_dir = Path(__file__).resolve().parents[1] / 'runs' / 'predict_overlay'
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        save_path = out_dir / f'overlay_{ts}.mp4'
+                    save_path.parent.mkdir(parents=True, exist_ok=True)
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    writer = cv2.VideoWriter(str(save_path), fourcc, max(args.save_fps, 1.0), (frame.shape[1], frame.shape[0]))
+                writer.write(frame)
 
         cv2.imshow(win, frame)
-        return (cv2.waitKey(1) & 0xFF) == ord('q')
+        return cv2.waitKey(wait_ms) & 0xFF
+
+    def process_raw_frame(raw):
+        nonlocal frame_idx
+        frame_idx += 1
+        r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True, verbose=False)[0]
+        frame, count = render_result(r)
+        if pose_model is not None:
+            pr = pose_model.predict(raw, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
+            frame = draw_human_arm_overlay(frame, pr)
+        if grip_model is not None:
+            gr = grip_model.predict(raw, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
+            frame = draw_grip_overlay(frame, gr)
+        if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
+            print(f'frame {frame_idx}: count={count}')
+        return frame, count
 
     if source == 0:
         cap = cv2.VideoCapture(0)
@@ -257,22 +304,14 @@ def main():
             ok, raw = cap.read()
             if not ok:
                 break
-            frame_idx += 1
-            r = model.predict(raw, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True, verbose=False)[0]
-            frame, count = render_result(r)
-            if pose_model is not None:
-                pr = pose_model.predict(raw, imgsz=args.imgsz, conf=args.human_conf, device=args.device, verbose=False)[0]
-                frame = draw_human_arm_overlay(frame, pr)
-            if grip_model is not None:
-                gr = grip_model.predict(raw, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
-                frame = draw_grip_overlay(frame, gr)
-            if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
-                print(f'frame {frame_idx}: count={count}')
-            if show_and_maybe_save(frame):
+            frame, _ = process_raw_frame(raw)
+            key = show_and_maybe_save(add_controls_overlay(frame, 'webcam mode'))
+            if key in (ord('q'), 27):
                 break
         cap.release()
     else:
-        for r in model.predict(source=source, stream=True, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True):
+        if is_image_source(source):
+            r = model.predict(source=source, imgsz=args.imgsz, conf=args.conf, device=args.device, retina_masks=True, verbose=False)[0]
             frame_idx += 1
             frame, count = render_result(r)
             if pose_model is not None and getattr(r, 'orig_img', None) is not None:
@@ -281,10 +320,58 @@ def main():
             if grip_model is not None and getattr(r, 'orig_img', None) is not None:
                 gr = grip_model.predict(r.orig_img, imgsz=args.imgsz, conf=args.grip_conf, device=args.device, verbose=False)[0]
                 frame = draw_grip_overlay(frame, gr)
-            if args.count_log and (frame_idx % max(1, args.count_log_every) == 0):
-                print(f'frame {frame_idx}: count={count}')
-            if show_and_maybe_save(frame):
-                break
+            if args.count_log:
+                print(f'image {Path(source).name}: count={count}')
+            show_and_maybe_save(add_controls_overlay(frame, f'image mode: {Path(source).name}'), wait_ms=0)
+        else:
+            cap = cv2.VideoCapture(source)
+            if not cap.isOpened():
+                raise RuntimeError(f'Cannot open video source: {source}')
+
+            paused = False
+            last_frame = None
+            video_name = Path(source).name
+
+            def seek_relative(delta_frames):
+                cur_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES) or 0)
+                target = max(0, cur_idx + delta_frames)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+
+            while True:
+                if not paused or last_frame is None:
+                    ok, raw = cap.read()
+                    if not ok:
+                        break
+                    frame, _ = process_raw_frame(raw)
+                    last_frame = frame
+
+                shown = add_controls_overlay(last_frame, f'video mode: {video_name}', paused=paused)
+                key = show_and_maybe_save(shown, wait_ms=0 if paused else 1)
+                if key in (ord('q'), 27):
+                    break
+                if key == ord(' '):
+                    paused = not paused
+                    continue
+                if key == ord('n'):
+                    paused = True
+                    ok, raw = cap.read()
+                    if not ok:
+                        break
+                    frame, _ = process_raw_frame(raw)
+                    last_frame = frame
+                    continue
+                if key == ord('j'):
+                    seek_relative(-30)
+                    paused = True
+                    last_frame = None
+                    continue
+                if key == ord('k'):
+                    seek_relative(30)
+                    paused = True
+                    last_frame = None
+                    continue
+
+            cap.release()
 
     if writer is not None:
         writer.release()

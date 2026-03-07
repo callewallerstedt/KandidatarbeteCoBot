@@ -169,11 +169,48 @@ class App(tk.Tk):
             'synth_place_profile_var': self.synth_place_profile_var,
             'synth_bg_video_var': self.synth_bg_video_var,
             'synth_bg_extract_n_var': self.synth_bg_extract_n_var,
+            'synth_temp_bias_var': self.synth_temp_bias_var,
+            'synth_temp_variance_var': self.synth_temp_variance_var,
+            'synth_shade_prob_var': self.synth_shade_prob_var,
+            'synth_shade_strength_var': self.synth_shade_strength_var,
+            'synth_multi_class_var': self.synth_multi_class_var,
+            'synth_multi_class_id_var': self.synth_multi_class_id_var,
+            'synth_multi_bg_dir_var': self.synth_multi_bg_dir_var,
+            'synth_multi_n_var': self.synth_multi_n_var,
+            'synth_multi_min_obj_var': self.synth_multi_min_obj_var,
+            'synth_multi_max_obj_var': self.synth_multi_max_obj_var,
+            'synth_multi_overlap_var': self.synth_multi_overlap_var,
+            'synth_multi_max_overlap_ratio_var': self.synth_multi_max_overlap_ratio_var,
+            'synth_multi_cluster_dist_var': self.synth_multi_cluster_dist_var,
+            'synth_multi_overlap_spread_var': self.synth_multi_overlap_spread_var,
+            'synth_multi_workers_var': self.synth_multi_workers_var,
+            'synth_multi_temp_bias_var': self.synth_multi_temp_bias_var,
+            'synth_multi_temp_variance_var': self.synth_multi_temp_variance_var,
+            'synth_multi_shade_prob_var': self.synth_multi_shade_prob_var,
+            'synth_multi_shade_strength_var': self.synth_multi_shade_strength_var,
+            'synth_multi_place_profile_var': self.synth_multi_place_profile_var,
+            'synth_multi_preview_mode_var': self.synth_multi_preview_mode_var,
+            'synth_multi_preview_count_var': self.synth_multi_preview_count_var,
+            'synth_multi_run_var': self.synth_multi_run_var,
+            'synth_all_use_multi_var': self.synth_all_use_multi_var,
+            'synth_all_n_multi_var': self.synth_all_n_multi_var,
+            'synth_all_multi_min_obj_var': self.synth_all_multi_min_obj_var,
+            'synth_all_multi_max_obj_var': self.synth_all_multi_max_obj_var,
+            'synth_all_multi_overlap_var': self.synth_all_multi_overlap_var,
+            'synth_all_multi_max_overlap_ratio_var': self.synth_all_multi_max_overlap_ratio_var,
+            'synth_all_multi_cluster_dist_var': self.synth_all_multi_cluster_dist_var,
+            'synth_all_multi_min_scale_var': self.synth_all_multi_min_scale_var,
+            'synth_all_multi_max_scale_var': self.synth_all_multi_max_scale_var,
+            'synth_all_multi_spread_var': self.synth_all_multi_spread_var,
             'model_var': self.model_var,
             'epochs_var': self.epochs_var,
             'imgsz_var': self.imgsz_var,
             'batch_var': self.batch_var,
+            'device_var': self.device_var,
             'workers_var': self.workers_var,
+            'remote_train_target_var': self.remote_train_target_var,
+            'remote_train_repo_var': self.remote_train_repo_var,
+            'remote_train_python_var': self.remote_train_python_var,
             'weights_var': self.weights_var,
             'source_var': self.source_var,
             'video_var': self.video_var,
@@ -581,6 +618,7 @@ class App(tk.Tk):
         ttk.Button(frm, text='Preview auto-labeled frames', command=self.preview_autolabel).grid(row=12, column=2, sticky='w')
 
         ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=13, column=0, pady=8)
+        ttk.Button(frm, text='Rank realistic source images', command=self.rank_realistic_sources).grid(row=13, column=1, pady=8, sticky='w')
 
         ttk.Separator(frm, orient='horizontal').grid(row=14, column=0, columnspan=3, sticky='we', pady=6)
         ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=15, column=0, sticky='w')
@@ -624,19 +662,16 @@ class App(tk.Tk):
         self.synth_class_id_var = tk.StringVar(value='0')
         self.bg_dir_var = tk.StringVar()
         self.synth_n_var = tk.StringVar(value='300')
-        self.synth_min_scale_var = tk.StringVar(value='0.55')
-        self.synth_max_scale_var = tk.StringVar(value='1.25')
-        self.synth_rot_var = tk.StringVar(value='25')
-        self.synth_bri_min_var = tk.StringVar(value='-20')
-        self.synth_bri_max_var = tk.StringVar(value='20')
-        self.synth_obj_bri_min_var = tk.StringVar(value='-10')
-        self.synth_obj_bri_max_var = tk.StringVar(value='10')
         self.synth_preview_count_var = tk.StringVar(value='12')
         self.synth_run_var = tk.StringVar(value='')
         self.synth_place_rect_var = tk.StringVar(value='')
         self.synth_place_profile_var = tk.StringVar(value='')
         self.synth_bg_video_var = tk.StringVar(value='')
         self.synth_bg_extract_n_var = tk.StringVar(value='120')
+        self.synth_temp_bias_var = tk.StringVar(value='0.35')
+        self.synth_temp_variance_var = tk.StringVar(value='0.18')
+        self.synth_shade_prob_var = tk.StringVar(value='0.45')
+        self.synth_shade_strength_var = tk.StringVar(value='0.22')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -661,44 +696,33 @@ class App(tk.Tk):
         ttk.Label(frm, text='Num synthetic images').grid(row=4, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_n_var).grid(row=4, column=1, sticky='we')
 
-        ttk.Label(frm, text='Min scale').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_min_scale_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Object warmth bias (-1 cooler, +1 warmer)').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_temp_bias_var, width=10).grid(row=5, column=1, sticky='w')
+        ttk.Label(frm, text='Temp variance').grid(row=5, column=1, padx=(120,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_temp_variance_var, width=10).grid(row=5, column=2, sticky='w')
 
-        ttk.Label(frm, text='Max scale').grid(row=5, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_max_scale_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Partial shading probability').grid(row=6, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_shade_prob_var, width=10).grid(row=6, column=1, sticky='w')
+        ttk.Label(frm, text='Shading strength').grid(row=6, column=1, padx=(120,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_shade_strength_var, width=10).grid(row=6, column=2, sticky='w')
 
-        ttk.Label(frm, text='Max rotation deg').grid(row=6, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_rot_var).grid(row=6, column=1, sticky='we')
+        ttk.Label(frm, text='Scale and brightness come from placement_profile.json. Rotation is fixed at 360 deg. Single synth now uses the same warmth and shading stack as multi.').grid(row=7, column=0, columnspan=3, sticky='w')
 
-        ttk.Label(frm, text='Background brightness min (beta)').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_bri_min_var).grid(row=7, column=1, sticky='we')
+        ttk.Label(frm, text='Synth run name (optional)').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Background brightness max (beta)').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_bri_max_var).grid(row=8, column=1, sticky='we')
+        ttk.Label(frm, text='Preview count').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=9, column=1, sticky='w')
 
-        ttk.Label(frm, text='Object brightness min (beta)').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_obj_bri_min_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='Global placement rect x1,y1,x2,y2 (optional)').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=10, column=1, sticky='w')
+        ttk.Button(frm, text='Edit per-bg polygon areas', command=self.pick_synth_placement_rect).grid(row=10, column=2, sticky='w')
 
-        ttk.Label(frm, text='Object brightness max (beta)').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_obj_bri_max_var).grid(row=10, column=1, sticky='we')
+        ttk.Label(frm, text='Placement profile path is auto: <background folder>/placement_profile.json').grid(row=11, column=0, columnspan=2, sticky='w')
+        ttk.Button(frm, text='Edit profile', command=self.edit_synth_profile).grid(row=11, column=2, sticky='w')
 
-        ttk.Label(frm, text='Synth run name (optional)').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=11, column=1, sticky='we')
-
-        ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=12, column=1, sticky='w')
-
-        ttk.Label(frm, text='Global placement rect x1,y1,x2,y2 (optional)').grid(row=13, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=13, column=1, sticky='w')
-        ttk.Button(frm, text='Edit per-bg polygon areas', command=self.pick_synth_placement_rect).grid(row=13, column=2, sticky='w')
-
-        ttk.Label(frm, text='Per-bg profile JSON (optional)').grid(row=14, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_place_profile_var, width=50).grid(row=14, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_synth_profile).grid(row=14, column=2, sticky='w')
-        ttk.Button(frm, text='Edit profile', command=self.edit_synth_profile).grid(row=14, column=2, padx=(70,0), sticky='w')
-
-        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=15, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=15, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=12, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=12, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_multi_tab(self):
@@ -713,6 +737,11 @@ class App(tk.Tk):
         self.synth_multi_max_overlap_ratio_var = tk.StringVar(value='0.5')
         self.synth_multi_cluster_dist_var = tk.StringVar(value='1.0')
         self.synth_multi_overlap_spread_var = tk.StringVar(value='0.25')
+        self.synth_multi_workers_var = tk.StringVar(value='1')
+        self.synth_multi_temp_bias_var = tk.StringVar(value='0.35')
+        self.synth_multi_temp_variance_var = tk.StringVar(value='0.18')
+        self.synth_multi_shade_prob_var = tk.StringVar(value='0.45')
+        self.synth_multi_shade_strength_var = tk.StringVar(value='0.22')
         self.synth_multi_place_profile_var = tk.StringVar(value='')
         self.synth_multi_preview_mode_var = tk.StringVar(value='random')
         self.synth_multi_preview_count_var = tk.StringVar(value='12')
@@ -731,10 +760,8 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_multi_bg_dir_var, width=70).grid(row=2, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_synth_multi_bg_dir).grid(row=2, column=2)
 
-        ttk.Label(frm, text='Per-bg profile JSON (optional)').grid(row=3, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_place_profile_var, width=50).grid(row=3, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_synth_multi_profile).grid(row=3, column=2, sticky='w')
-        ttk.Button(frm, text='Edit profile', command=self.edit_synth_multi_profile).grid(row=3, column=2, padx=(70,0), sticky='w')
+        ttk.Label(frm, text='Placement profile path is auto: <background folder>/placement_profile.json').grid(row=3, column=0, columnspan=2, sticky='w')
+        ttk.Button(frm, text='Edit profile', command=self.edit_synth_multi_profile).grid(row=3, column=2, sticky='w')
 
         ttk.Label(frm, text='Num synthetic images').grid(row=4, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_n_var).grid(row=4, column=1, sticky='we')
@@ -757,20 +784,35 @@ class App(tk.Tk):
         ttk.Label(frm, text='Overlap spread (0 tight overlap, 1 wider)').grid(row=10, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_overlap_spread_var).grid(row=10, column=1, sticky='we')
 
-        ttk.Label(frm, text='Scale + brightness come from Synth BG setup/profile (per-background).').grid(row=11, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Object warmth bias (-1 cooler, +1 warmer)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_temp_bias_var, width=10).grid(row=11, column=1, sticky='w')
+        ttk.Label(frm, text='Temp variance').grid(row=11, column=1, padx=(120,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_temp_variance_var, width=10).grid(row=11, column=2, sticky='w')
 
-        ttk.Label(frm, text='Run name (optional)').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=12, column=1, sticky='we')
+        ttk.Label(frm, text='Partial shading probability').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_shade_prob_var, width=10).grid(row=12, column=1, sticky='w')
+        ttk.Label(frm, text='Shading strength').grid(row=12, column=1, padx=(120,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_shade_strength_var, width=10).grid(row=12, column=2, sticky='w')
 
-        ttk.Label(frm, text='Preview mode').grid(row=13, column=0, sticky='w')
-        ttk.Combobox(frm, textvariable=self.synth_multi_preview_mode_var, values=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'], state='readonly', width=18).grid(row=13, column=1, sticky='w')
+        ttk.Label(frm, text='Generation workers (1 = single process)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_workers_var, width=10).grid(row=13, column=1, sticky='w')
 
-        ttk.Label(frm, text='Preview count').grid(row=14, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=14, column=1, sticky='w')
+        ttk.Label(frm, text='Scale + brightness come from Synth BG setup/profile (per-background). Preview uses the same warmth and shading controls.').grid(row=14, column=0, columnspan=3, sticky='w')
 
-        ttk.Button(frm, text='Preview multi-instance samples (left/right browse)', command=self.preview_synth_multi).grid(row=15, column=0, pady=8, sticky='w')
-        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=15, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Cluster mode: close/touching by default, max overlap enforced.').grid(row=16, column=0, columnspan=3, sticky='w', pady=(2,0))
+        ttk.Label(frm, text='Run name (optional)').grid(row=15, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=15, column=1, sticky='we')
+
+        ttk.Label(frm, text='Preview mode').grid(row=16, column=0, sticky='w')
+        ttk.Combobox(frm, textvariable=self.synth_multi_preview_mode_var, values=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'], state='readonly', width=18).grid(row=16, column=1, sticky='w')
+
+        ttk.Label(frm, text='Preview count').grid(row=17, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=17, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview multi-instance samples (new)', command=self.preview_synth_multi_profile).grid(row=18, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Legacy preview', command=self.preview_synth_multi).grid(row=18, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Preview temp min/max', command=self.preview_synth_multi_temp_extremes).grid(row=18, column=2, pady=8, sticky='w')
+        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=19, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Cluster mode: close/touching by default, max overlap enforced. Use partial shading to mimic one-sided shadowing on some objects.').grid(row=20, column=0, columnspan=3, sticky='w', pady=(2,0))
         frm.columnconfigure(1, weight=1)
 
     def build_synth_all_tab(self):
@@ -1057,8 +1099,9 @@ class App(tk.Tk):
 
         ttk.Button(frm, text='Prepare frames + initial masks', command=self.prepare_manual).grid(row=10, column=0, pady=8)
         ttk.Button(frm, text='Open manual mask reviewer', command=self.open_manual_reviewer).grid(row=10, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Auto-mask + open reviewer', command=self.prepare_and_open_manual).grid(row=10, column=2, pady=8, sticky='w')
 
-        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=11, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Reviewer hotkeys: draw LMB | a/e add-erase | i auto-mask | s save | n/p next-prev | +/- brush | z/x zoom | q quit').grid(row=11, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_train_tab(self):
@@ -1070,6 +1113,10 @@ class App(tk.Tk):
         self.batch_var = tk.StringVar(value='8')
         self.device_var = tk.StringVar(value='0')
         self.workers_var = tk.StringVar(value='0')
+        self.remote_train_target_var = tk.StringVar(value='')
+        self.remote_train_repo_var = tk.StringVar(value=str(ROOT))
+        remote_py = '.venv\\Scripts\\python.exe' if os.name == 'nt' else '.venv/bin/python'
+        self.remote_train_python_var = tk.StringVar(value=str(Path(str(ROOT)) / remote_py))
 
         ttk.Label(frm, text='Model/weights').grid(row=0, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.model_var).grid(row=0, column=1, sticky='we')
@@ -1098,6 +1145,21 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.workers_var).grid(row=7, column=1, sticky='we')
 
         ttk.Button(frm, text='Start training', command=self.train).grid(row=8, column=0, pady=8)
+        ttk.Separator(frm, orient='horizontal').grid(row=9, column=0, columnspan=3, sticky='we', pady=6)
+
+        ttk.Label(frm, text='Remote SSH target').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_target_var).grid(row=10, column=1, sticky='we')
+        ttk.Label(frm, text='Example: user@training-pc').grid(row=10, column=2, sticky='w')
+
+        ttk.Label(frm, text='Remote repo folder').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_repo_var).grid(row=11, column=1, sticky='we')
+
+        ttk.Label(frm, text='Remote python').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_python_var).grid(row=12, column=1, sticky='we')
+
+        ttk.Button(frm, text='Show remote SSH command', command=self.show_remote_train_command).grid(row=13, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Start training on remote PC', command=self.start_remote_train).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Requires SSH access and a synced repo/data on the other PC. Training logs go to runs/segment on that PC.').grid(row=14, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_ddp_tab(self):
@@ -1193,9 +1255,9 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.weights_var, width=70).grid(row=0, column=1, sticky='we')
         ttk.Button(frm, text='Browse', command=self.pick_weights).grid(row=0, column=2)
 
-        ttk.Label(frm, text='Source (0 webcam or video path)').grid(row=1, column=0, sticky='w')
+        ttk.Label(frm, text='Source (0 webcam, image, or video path)').grid(row=1, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.source_var).grid(row=1, column=1, sticky='we')
-        ttk.Button(frm, text='Browse video', command=self.pick_infer_source).grid(row=1, column=2)
+        ttk.Button(frm, text='Browse media', command=self.pick_infer_source).grid(row=1, column=2)
 
         ttk.Label(frm, text='Image size').grid(row=2, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.infer_imgsz_var).grid(row=2, column=1, sticky='we')
@@ -1248,6 +1310,7 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.unity_tcp_port_var, width=8).grid(row=15, column=2, sticky='w')
 
         ttk.Button(frm, text='Run overlay inference', command=self.infer).grid(row=16, column=0, pady=8)
+        ttk.Label(frm, text='Video controls: space pause/play, n next frame, j/k skip -/+30 frames, q quit').grid(row=17, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_headcam_tab(self):
@@ -1345,7 +1408,15 @@ class App(tk.Tk):
             self.weights_var.set(p)
 
     def pick_infer_source(self):
-        p = filedialog.askopenfilename(title='Select inference video source')
+        p = filedialog.askopenfilename(
+            title='Select inference image or video source',
+            filetypes=[
+                ('Media', '*.jpg *.jpeg *.png *.webp *.bmp *.mp4 *.avi *.mov *.mkv'),
+                ('Images', '*.jpg *.jpeg *.png *.webp *.bmp'),
+                ('Videos', '*.mp4 *.avi *.mov *.mkv'),
+                ('All files', '*.*'),
+            ],
+        )
         if p:
             self.source_var.set(p)
 
@@ -1474,29 +1545,24 @@ class App(tk.Tk):
         if p:
             self.synth_bg_video_var.set(p)
 
-    def pick_synth_profile(self):
-        p = filedialog.askopenfilename(title='Select per-background placement profile JSON', filetypes=[('JSON', '*.json'), ('All files', '*.*')])
-        if p:
-            self.synth_place_profile_var.set(p)
-
     def edit_synth_profile(self):
         if not (self.bg_dir_var.get() or '').strip():
             self.log_line('Select background folder first.')
             return
-        prof = (self.synth_place_profile_var.get() or '').strip()
-        if not prof:
-            prof = str(Path(self.bg_dir_var.get().strip()) / 'placement_profile.json')
-            self.synth_place_profile_var.set(prof)
+        prof = str(Path(self.bg_dir_var.get().strip()) / 'placement_profile.json')
+        self.synth_place_profile_var.set(prof)
         self.log_line('Opening per-background polygon editor (left click corners, right click/Enter to finish, n/p step, s save).')
         cmd = [
             str(PY), 'scripts/edit_bg_placement_profile.py',
             '--bg-dir', self.bg_dir_var.get().strip(),
             '--profile', prof,
             '--class-name', self.synth_class_var.get().strip(),
-            '--bg-brightness-min', self.synth_bri_min_var.get(),
-            '--bg-brightness-max', self.synth_bri_max_var.get(),
-            '--obj-brightness-min', self.synth_obj_bri_min_var.get(),
-            '--obj-brightness-max', self.synth_obj_bri_max_var.get(),
+            '--min-scale', '0.55',
+            '--max-scale', '1.25',
+            '--bg-brightness-min', '-20',
+            '--bg-brightness-max', '20',
+            '--obj-brightness-min', '-10',
+            '--obj-brightness-max', '10',
             '--control-window',
         ]
         self.run_cmd(cmd)
@@ -1531,32 +1597,25 @@ class App(tk.Tk):
         p = filedialog.askdirectory(title='Select background images folder for multi-instance synth')
         if p:
             self.synth_multi_bg_dir_var.set(p)
-            if not (self.synth_multi_place_profile_var.get() or '').strip():
-                self.synth_multi_place_profile_var.set(str(Path(p) / 'placement_profile.json'))
-
-    def pick_synth_multi_profile(self):
-        p = filedialog.askopenfilename(title='Select per-background placement profile JSON (multi-instance)', filetypes=[('JSON', '*.json'), ('All files', '*.*')])
-        if p:
-            self.synth_multi_place_profile_var.set(p)
 
     def edit_synth_multi_profile(self):
         if not (self.synth_multi_bg_dir_var.get() or '').strip():
             self.log_line('Select background folder first (multi-instance).')
             return
-        prof = (self.synth_multi_place_profile_var.get() or '').strip()
-        if not prof:
-            prof = str(Path(self.synth_multi_bg_dir_var.get().strip()) / 'placement_profile.json')
-            self.synth_multi_place_profile_var.set(prof)
+        prof = str(Path(self.synth_multi_bg_dir_var.get().strip()) / 'placement_profile.json')
+        self.synth_multi_place_profile_var.set(prof)
         self.log_line('Opening per-background polygon editor for multi-instance tab.')
         cmd = [
             str(PY), 'scripts/edit_bg_placement_profile.py',
             '--bg-dir', self.synth_multi_bg_dir_var.get().strip(),
             '--profile', prof,
             '--class-name', self.synth_multi_class_var.get().strip(),
-            '--bg-brightness-min', self.synth_bri_min_var.get(),
-            '--bg-brightness-max', self.synth_bri_max_var.get(),
-            '--obj-brightness-min', self.synth_obj_bri_min_var.get(),
-            '--obj-brightness-max', self.synth_obj_bri_max_var.get(),
+            '--min-scale', '0.55',
+            '--max-scale', '1.25',
+            '--bg-brightness-min', '-20',
+            '--bg-brightness-max', '20',
+            '--obj-brightness-min', '-10',
+            '--obj-brightness-max', '10',
             '--control-window',
         ]
         self.run_cmd(cmd)
@@ -1767,6 +1826,19 @@ class App(tk.Tk):
         self.run_cmd(cmd)
         self.after(1000, self.refresh_class_options)
 
+    def rank_realistic_sources(self):
+        cname = (self.class_var.get() or '').strip()
+        if not cname:
+            self.log_line('Select a class first.')
+            return
+        cmd = [
+            str(PY), 'scripts/rank_realistic_sources.py',
+            '--class-name', cname,
+            '--component-name', (self.auto_component_var.get() or 'main').strip() or 'main',
+            '--data-root', str(ROOT / 'data'),
+        ]
+        self.run_cmd(cmd)
+
     def import_unity_red_masks(self):
         if not self.ensure_class_registered(self.class_var.get(), self.class_id_var.get()):
             return
@@ -1786,35 +1858,77 @@ class App(tk.Tk):
         self.after(1000, self.refresh_class_options)
 
     def _synth_cmd_base(self):
+        bg_dir = self.bg_dir_var.get().strip()
         cmd = [
             str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
             '--class-name', self.synth_class_var.get(),
             '--class-id', self.synth_class_id_var.get(),
-            '--background-dir', self.bg_dir_var.get(),
+            '--background-dir', bg_dir,
             '--num-synthetic', self.synth_n_var.get(),
-            '--min-scale', self.synth_min_scale_var.get(),
-            '--max-scale', self.synth_max_scale_var.get(),
-            '--max-rotation', self.synth_rot_var.get(),
-            '--brightness-min', self.synth_bri_min_var.get(),
-            '--brightness-max', self.synth_bri_max_var.get(),
-            '--object-brightness-min', self.synth_obj_bri_min_var.get(),
-            '--object-brightness-max', self.synth_obj_bri_max_var.get(),
+            '--max-rotation', '360',
+            '--object-temp-bias', self.synth_temp_bias_var.get(),
+            '--object-temp-variance', self.synth_temp_variance_var.get(),
+            '--object-shade-prob', self.synth_shade_prob_var.get(),
+            '--object-shade-strength', self.synth_shade_strength_var.get(),
         ]
         if self.synth_place_rect_var.get().strip():
             cmd.extend(['--placement-rect', self.synth_place_rect_var.get().strip()])
-        if self.synth_place_profile_var.get().strip():
-            cmd.extend(['--placement-profile', self.synth_place_profile_var.get().strip()])
+        profile_path = str(Path(bg_dir) / 'placement_profile.json') if bg_dir else ''
+        if profile_path:
+            cmd.extend(['--placement-profile', profile_path])
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         return cmd
 
+    def _strip_synth_profile_overrides_for_preview(self, cmd, profile_path):
+        if not profile_path or not Path(profile_path).exists():
+            return cmd
+        drop_flags = {
+            '--min-scale',
+            '--max-scale',
+            '--brightness-min',
+            '--brightness-max',
+            '--object-brightness-min',
+            '--object-brightness-max',
+        }
+        out = []
+        i = 0
+        while i < len(cmd):
+            token = cmd[i]
+            if token in drop_flags:
+                i += 2
+                continue
+            out.append(token)
+            i += 1
+        return out
+
     def preview_synth(self):
         if not self.ensure_class_registered(self.synth_class_var.get(), self.synth_class_id_var.get()):
             return
-        if not self.bg_dir_var.get().strip():
+        bg_dir = self.bg_dir_var.get().strip()
+        if not bg_dir:
             self.log_line('Please select a background folder first.')
             return
-        cmd = self._synth_cmd_base() + ['--preview-only', '--preview-window', '--preview-count', self.synth_preview_count_var.get()]
+        profile_path = str(Path(bg_dir) / 'placement_profile.json')
+        if not Path(profile_path).exists():
+            self.log_line(f'Synth preview requires {profile_path}.')
+            return
+        cmd = [
+            str(PY), 'scripts/preview_single_profile.py',
+            '--class-name', self.synth_class_var.get(),
+            '--class-id', self.synth_class_id_var.get(),
+            '--background-dir', bg_dir,
+            '--placement-profile', profile_path,
+            '--preview-count', self.synth_preview_count_var.get(),
+            '--object-temp-bias', self.synth_temp_bias_var.get(),
+            '--object-temp-variance', self.synth_temp_variance_var.get(),
+            '--object-shade-prob', self.synth_shade_prob_var.get(),
+            '--object-shade-strength', self.synth_shade_strength_var.get(),
+            '--max-rotation', '360',
+            '--preview-window',
+        ]
+        if self.synth_run_var.get().strip():
+            cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         self.run_cmd(cmd)
 
     def generate_synth(self):
@@ -1826,33 +1940,55 @@ class App(tk.Tk):
         self.run_cmd(self._synth_cmd_base())
 
     def _synth_multi_cmd_base(self):
+        bg_dir = self.synth_multi_bg_dir_var.get().strip()
         cmd = [
             str(PY), 'scripts/synthesize_multi_instance.py',
             '--class-name', self.synth_multi_class_var.get(),
             '--class-id', self.synth_multi_class_id_var.get(),
-            '--background-dir', self.synth_multi_bg_dir_var.get(),
+            '--background-dir', bg_dir,
             '--num-synthetic', self.synth_multi_n_var.get(),
             '--min-objects', self.synth_multi_min_obj_var.get(),
             '--max-objects', self.synth_multi_max_obj_var.get(),
             '--overlap-prob', self.synth_multi_overlap_var.get(),
             '--max-overlap-ratio', self.synth_multi_max_overlap_ratio_var.get(),
             '--cluster-distance-factor', self.synth_multi_cluster_dist_var.get(),
-            '--min-scale', self.synth_min_scale_var.get(),
-            '--max-scale', self.synth_max_scale_var.get(),
             '--max-rotation', '360',
             '--overlap-spread', self.synth_multi_overlap_spread_var.get(),
-            '--brightness-min', self.synth_bri_min_var.get(),
-            '--brightness-max', self.synth_bri_max_var.get(),
-            '--object-brightness-min', self.synth_obj_bri_min_var.get(),
-            '--object-brightness-max', self.synth_obj_bri_max_var.get(),
+            '--workers', self.synth_multi_workers_var.get(),
+            '--object-temp-bias', self.synth_multi_temp_bias_var.get(),
+            '--object-temp-variance', self.synth_multi_temp_variance_var.get(),
+            '--object-shade-prob', self.synth_multi_shade_prob_var.get(),
+            '--object-shade-strength', self.synth_multi_shade_strength_var.get(),
             '--preview-mode', self.synth_multi_preview_mode_var.get().strip() or 'random',
         ]
-        profile_path = self.synth_place_profile_var.get().strip() or self.synth_multi_place_profile_var.get().strip()
+        profile_path = str(Path(bg_dir) / 'placement_profile.json') if bg_dir else ''
         if profile_path:
             cmd.extend(['--placement-profile', profile_path])
         if self.synth_multi_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_multi_run_var.get().strip()])
         return cmd
+
+    def _strip_synth_multi_profile_overrides_for_preview(self, cmd, profile_path):
+        if not profile_path or not Path(profile_path).exists():
+            return cmd
+        drop_flags = {
+            '--min-scale',
+            '--max-scale',
+            '--brightness-min',
+            '--brightness-max',
+            '--object-brightness-min',
+            '--object-brightness-max',
+        }
+        out = []
+        i = 0
+        while i < len(cmd):
+            token = cmd[i]
+            if token in drop_flags:
+                i += 2
+                continue
+            out.append(token)
+            i += 1
+        return out
 
     def preview_synth_multi(self):
         if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
@@ -1860,7 +1996,100 @@ class App(tk.Tk):
         if not self.synth_multi_bg_dir_var.get().strip():
             self.log_line('Please select a background folder first (multi-instance).')
             return
-        cmd = self._synth_multi_cmd_base() + ['--preview-only', '--preview-window', '--preview-count', self.synth_multi_preview_count_var.get()]
+        profile_path = str(Path(self.synth_multi_bg_dir_var.get().strip()) / 'placement_profile.json')
+        cmd = self._strip_synth_multi_profile_overrides_for_preview(self._synth_multi_cmd_base(), profile_path)
+        cmd += ['--preview-only', '--preview-window', '--preview-count', self.synth_multi_preview_count_var.get()]
+        self.run_cmd(cmd)
+
+    def preview_synth_multi_profile(self):
+        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
+            return
+        bg_dir = self.synth_multi_bg_dir_var.get().strip()
+        if not bg_dir:
+            self.log_line('Please select a background folder first (multi-instance).')
+            return
+        profile_path = str(Path(bg_dir) / 'placement_profile.json')
+        if not Path(profile_path).exists():
+            self.log_line(f'Multi-instance profile preview requires {profile_path}.')
+            return
+        cmd = [
+            str(PY), 'scripts/preview_multi_instance_profile.py',
+            '--class-name', self.synth_multi_class_var.get(),
+            '--class-id', self.synth_multi_class_id_var.get(),
+            '--background-dir', bg_dir,
+            '--placement-profile', profile_path,
+            '--preview-count', self.synth_multi_preview_count_var.get(),
+            '--preview-mode', self.synth_multi_preview_mode_var.get().strip() or 'random',
+            '--min-objects', self.synth_multi_min_obj_var.get(),
+            '--max-objects', self.synth_multi_max_obj_var.get(),
+            '--overlap-prob', self.synth_multi_overlap_var.get(),
+            '--max-overlap-ratio', self.synth_multi_max_overlap_ratio_var.get(),
+            '--cluster-distance-factor', self.synth_multi_cluster_dist_var.get(),
+            '--overlap-spread', self.synth_multi_overlap_spread_var.get(),
+            '--object-temp-bias', self.synth_multi_temp_bias_var.get(),
+            '--object-temp-variance', self.synth_multi_temp_variance_var.get(),
+            '--object-shade-prob', self.synth_multi_shade_prob_var.get(),
+            '--object-shade-strength', self.synth_multi_shade_strength_var.get(),
+            '--max-rotation', '360',
+            '--preview-window',
+        ]
+        if self.synth_multi_run_var.get().strip():
+            cmd.extend(['--run-name', self.synth_multi_run_var.get().strip()])
+        self.run_cmd(cmd)
+
+    def _build_synth_multi_profile_preview_cmd(self, temp_bias=None, temp_variance=None, run_suffix=''):
+        bg_dir = self.synth_multi_bg_dir_var.get().strip()
+        profile_path = str(Path(bg_dir) / 'placement_profile.json')
+        cmd = [
+            str(PY), 'scripts/preview_multi_instance_profile.py',
+            '--class-name', self.synth_multi_class_var.get(),
+            '--class-id', self.synth_multi_class_id_var.get(),
+            '--background-dir', bg_dir,
+            '--placement-profile', profile_path,
+            '--preview-count', self.synth_multi_preview_count_var.get(),
+            '--preview-mode', self.synth_multi_preview_mode_var.get().strip() or 'random',
+            '--min-objects', self.synth_multi_min_obj_var.get(),
+            '--max-objects', self.synth_multi_max_obj_var.get(),
+            '--overlap-prob', self.synth_multi_overlap_var.get(),
+            '--max-overlap-ratio', self.synth_multi_max_overlap_ratio_var.get(),
+            '--cluster-distance-factor', self.synth_multi_cluster_dist_var.get(),
+            '--overlap-spread', self.synth_multi_overlap_spread_var.get(),
+            '--object-temp-bias', str(self.synth_multi_temp_bias_var.get() if temp_bias is None else temp_bias),
+            '--object-temp-variance', str(self.synth_multi_temp_variance_var.get() if temp_variance is None else temp_variance),
+            '--object-shade-prob', self.synth_multi_shade_prob_var.get(),
+            '--object-shade-strength', self.synth_multi_shade_strength_var.get(),
+            '--max-rotation', '360',
+            '--preview-window',
+        ]
+        base_run = self.synth_multi_run_var.get().strip()
+        if base_run or run_suffix:
+            cmd.extend(['--run-name', f'{base_run}_{run_suffix}'.strip('_')])
+        return cmd
+
+    def preview_synth_multi_temp_extremes(self):
+        if not self.ensure_class_registered(self.synth_multi_class_var.get(), self.synth_multi_class_id_var.get()):
+            return
+        try:
+            bias = float(self.synth_multi_temp_bias_var.get())
+            variance = float(self.synth_multi_temp_variance_var.get())
+        except Exception:
+            self.log_line('Invalid temperature bias/variance values.')
+            return
+        cool = max(-1.0, bias - abs(variance))
+        warm = min(1.0, bias + abs(variance))
+        self.log_line(f'Opening quick cutout temperature preview: cool={cool:.3f}, warm={warm:.3f}')
+        try:
+            sample_count = min(max(int(self.synth_multi_preview_count_var.get() or '4'), 1), 8)
+        except Exception:
+            sample_count = 4
+        cmd = [
+            str(PY), 'scripts/preview_cutout_temp_extremes.py',
+            '--class-name', self.synth_multi_class_var.get(),
+            '--data-root', str(ROOT / 'data'),
+            '--cool-bias', str(cool),
+            '--warm-bias', str(warm),
+            '--sample-count', str(sample_count),
+        ]
         self.run_cmd(cmd)
 
     def generate_synth_multi(self):
@@ -1892,6 +2121,10 @@ class App(tk.Tk):
         if not self.synth_all_bg_dir_var.get().strip():
             self.log_line('COMBO RUN preview: select background folder first.')
             return
+        profile_path = str(Path(self.synth_all_bg_dir_var.get().strip()) / 'placement_profile.json')
+        if not Path(profile_path).exists():
+            self.log_line(f'COMBO RUN preview requires {profile_path}.')
+            return
         base = self.synth_all_run_var.get().strip() or 'combo01'
         cmd = [
             str(PY), 'scripts/synthesize_cutpaste_backgrounds.py',
@@ -1906,6 +2139,7 @@ class App(tk.Tk):
             '--brightness-max', self.synth_all_bg_bri_max_var.get(),
             '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
             '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+            '--placement-profile', profile_path,
             '--run-name', f'{base}_bg_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
         ]
@@ -1916,6 +2150,10 @@ class App(tk.Tk):
             return
         if not self.synth_all_bg_dir_var.get().strip():
             self.log_line('COMBO RUN preview: select background folder first.')
+            return
+        profile_path = str(Path(self.synth_all_bg_dir_var.get().strip()) / 'placement_profile.json')
+        if not Path(profile_path).exists():
+            self.log_line(f'COMBO RUN preview requires {profile_path}.')
             return
         base = self.synth_all_run_var.get().strip() or 'combo01'
         cmd = [
@@ -1937,6 +2175,7 @@ class App(tk.Tk):
             '--brightness-max', self.synth_all_bg_bri_max_var.get(),
             '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
             '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+            '--placement-profile', profile_path,
             '--run-name', f'{base}_multi_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
         ]
@@ -1991,6 +2230,10 @@ class App(tk.Tk):
         cid = self.synth_all_class_id_var.get()
         bg = self.synth_all_bg_dir_var.get().strip()
         obs = self.synth_all_obs_dir_var.get().strip()
+        profile_path = str(Path(bg) / 'placement_profile.json')
+        if (self.synth_all_use_bg_var.get() or self.synth_all_use_multi_var.get()) and not Path(profile_path).exists():
+            self.log_line(f'COMBO RUN requires {profile_path} for synth and multi generation.')
+            return
 
         n_bg = int(self.synth_all_n_bg_var.get() or '0')
         n_multi = int(self.synth_all_n_multi_var.get() or '0')
@@ -2009,6 +2252,7 @@ class App(tk.Tk):
                 '--brightness-max', self.synth_all_bg_bri_max_var.get(),
                 '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
                 '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+                '--placement-profile', profile_path,
                 '--run-name', f'{base}_bg',
             ]
             self.run_cmd(cmd_bg)
@@ -2032,6 +2276,7 @@ class App(tk.Tk):
                 '--brightness-max', self.synth_all_bg_bri_max_var.get(),
                 '--object-brightness-min', self.synth_all_obj_bri_min_var.get(),
                 '--object-brightness-max', self.synth_all_obj_bri_max_var.get(),
+                '--placement-profile', profile_path,
                 '--run-name', f'{base}_multi',
             ]
             self.run_cmd(cmd_multi)
@@ -2069,6 +2314,10 @@ class App(tk.Tk):
         if not self.manual_video_var.get().strip():
             self.log_line('Please select a video file first.')
             return
+        cmd = self._prepare_manual_cmd()
+        self.run_cmd(cmd)
+
+    def _prepare_manual_cmd(self):
         cmd = [
             str(PY), 'scripts/prepare_manual_review_from_video.py',
             '--video', self.manual_video_var.get(),
@@ -2083,7 +2332,15 @@ class App(tk.Tk):
         ]
         if self.manual_init_source_var.get() == 'yolo' and self.manual_init_weights_var.get().strip():
             cmd.extend(['--weights', self.manual_init_weights_var.get().strip()])
-        self.run_cmd(cmd)
+        return cmd
+
+    def prepare_and_open_manual(self):
+        if not self.ensure_class_registered(self.manual_class_var.get(), self.manual_class_id_var.get()):
+            return
+        if not self.manual_video_var.get().strip():
+            self.log_line('Please select a video file first.')
+            return
+        self.run_cmd_chain([self._prepare_manual_cmd(), self._manual_reviewer_cmd()])
 
     def _obstruction_cmd_base(self):
         return [
@@ -2127,13 +2384,16 @@ class App(tk.Tk):
         self.run_cmd(cmd)
 
     def open_manual_reviewer(self):
-        cmd = [
+        self.run_cmd(self._manual_reviewer_cmd())
+
+    def _manual_reviewer_cmd(self):
+        return [
             str(PY), 'scripts/manual_mask_reviewer.py',
             '--class-name', self.manual_class_var.get(),
             '--class-id', self.manual_class_id_var.get(),
             '--contains', f"{self.manual_prefix_var.get()}_",
+            '--auto-init',
         ]
-        self.run_cmd(cmd)
 
     def build_split(self):
         cmd = [str(PY), 'scripts/build_dataset_split.py', '--mode', self.split_mode_var.get()]
@@ -2230,6 +2490,46 @@ class App(tk.Tk):
             '--workers', self.workers_var.get(),
         ]
         self.run_cmd(cmd)
+
+    def _remote_train_cmd(self, print_only=False):
+        target = self.remote_train_target_var.get().strip()
+        repo = self.remote_train_repo_var.get().strip()
+        remote_python = self.remote_train_python_var.get().strip()
+        if not target:
+            self.log_line('Remote training: set SSH target first, e.g. user@training-pc')
+            return None
+        if not repo:
+            self.log_line('Remote training: set remote repo folder first.')
+            return None
+        if not remote_python:
+            self.log_line('Remote training: set remote python path first.')
+            return None
+
+        cmd = [
+            str(PY), 'scripts/launch_remote_train_ssh.py',
+            '--target', target,
+            '--remote-repo', repo,
+            '--remote-python', remote_python,
+            '--model', self.model_var.get(),
+            '--epochs', self.epochs_var.get(),
+            '--imgsz', self.imgsz_var.get(),
+            '--batch', self.batch_var.get(),
+            '--device', self.device_var.get(),
+            '--workers', self.workers_var.get(),
+        ]
+        if print_only:
+            cmd.append('--print-command')
+        return cmd
+
+    def show_remote_train_command(self):
+        cmd = self._remote_train_cmd(print_only=True)
+        if cmd:
+            self.run_cmd(cmd)
+
+    def start_remote_train(self):
+        cmd = self._remote_train_cmd(print_only=False)
+        if cmd:
+            self.run_cmd(cmd)
 
     def infer(self):
         if self.unity_tcp_var.get():

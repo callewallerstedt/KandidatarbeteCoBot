@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 import argparse
+import concurrent.futures
 import json
+import os
 import random
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
 
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+_WORKER_STATE = {}
 
 
 def load_yolo_polys(label_path: Path, w: int, h: int):
@@ -68,25 +72,28 @@ def profile_for_bg(args, bg_path):
     if not prof:
         return None
     items = prof.get('items', {})
-    if bg_path.name in items:
-        return items[bg_path.name]
-
     k_abs = str(bg_path).replace('\\', '/')
-    if k_abs in items:
-        return items[k_abs]
-
+    k_rel = None
     try:
         k_rel = str(bg_path.relative_to(Path(args.background_dir))).replace('\\', '/')
         if k_rel in items:
             return items[k_rel]
     except Exception:
-        k_rel = None
+        pass
+
+    if k_abs in items:
+        return items[k_abs]
+
+    if bg_path.name in items:
+        return items[bg_path.name]
 
     k_abs_low = k_abs.lower()
     k_rel_low = k_rel.lower() if k_rel else None
     for kk, vv in items.items():
         k_norm = str(kk).replace('\\', '/').lower()
-        if k_norm == k_abs_low or (k_rel_low and (k_norm == k_rel_low or k_norm.endswith('/' + k_rel_low))) or k_norm.endswith('/' + bg_path.name.lower()):
+        if k_rel_low and (k_norm == k_rel_low or k_norm.endswith('/' + k_rel_low)):
+            return vv
+        if k_norm == k_abs_low or k_norm.endswith('/' + bg_path.name.lower()):
             return vv
     return None
 
@@ -130,7 +137,45 @@ def write_yolo_multi(label_path: Path, class_id: int, polys, w, h):
     label_path.write_text('\n'.join(lines) + ('\n' if lines else ''), encoding='utf-8')
 
 
+def _worker_init(config):
+    from profile_scene_builders import build_multi_scene as core_build_multi_scene
+    from profile_scene_builders import collect_cutouts as core_collect_cutouts
+    from profile_scene_builders import load_profile as core_load_profile
+
+    args = SimpleNamespace(**config['args'])
+    data_root = Path(config['data_root'])
+    profile_data = core_load_profile(Path(config['placement_profile']))
+    cutouts = core_collect_cutouts(data_root, args.class_name)
+    _WORKER_STATE['build_multi_scene'] = core_build_multi_scene
+    _WORKER_STATE['args'] = args
+    _WORKER_STATE['bg_files'] = [Path(p) for p in config['bg_files']]
+    _WORKER_STATE['profile_data'] = profile_data
+    _WORKER_STATE['cutouts'] = cutouts
+    _WORKER_STATE['reference_long_side'] = float(cutouts[0]['long_side'])
+
+
+def _worker_generate_scene(task_idx):
+    build_multi_scene = _WORKER_STATE['build_multi_scene']
+    args = _WORKER_STATE['args']
+    seed = int(args.seed) + int(task_idx) * 9973 + 17
+    random.seed(seed)
+    np.random.seed(seed % (2**32 - 1))
+    scene = build_multi_scene(
+        args,
+        _WORKER_STATE['bg_files'],
+        _WORKER_STATE['profile_data'],
+        _WORKER_STATE['cutouts'],
+        _WORKER_STATE['reference_long_side'],
+    )
+    return scene
+
+
 def main():
+    from profile_scene_builders import build_multi_scene as core_build_multi_scene
+    from profile_scene_builders import collect_cutouts as core_collect_cutouts
+    from profile_scene_builders import load_profile as core_load_profile
+    from profile_scene_builders import next_output_index as core_next_output_index
+
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
     ap.add_argument('--class-id', type=int, required=True)
@@ -150,6 +195,11 @@ def main():
     ap.add_argument('--brightness-max', type=float, default=20.0)
     ap.add_argument('--object-brightness-min', type=float, default=-10.0)
     ap.add_argument('--object-brightness-max', type=float, default=10.0)
+    ap.add_argument('--object-temp-bias', type=float, default=0.35, help='Object temperature bias: -1 cooler, +1 warmer')
+    ap.add_argument('--object-temp-variance', type=float, default=0.18, help='Random object temperature variance around the bias')
+    ap.add_argument('--object-shade-prob', type=float, default=0.45, help='Probability of partial one-sided shading per object')
+    ap.add_argument('--object-shade-strength', type=float, default=0.22, help='Strength of partial object shading')
+    ap.add_argument('--workers', type=int, default=1, help='Parallel workers for generation only; preview stays single-process')
     ap.add_argument('--run-name', default='')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
@@ -164,18 +214,7 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
 
-    args.placement_profile_data = None
-    if args.placement_profile.strip():
-        p = Path(args.placement_profile)
-        if p.exists():
-            try:
-                args.placement_profile_data = json.loads(p.read_text(encoding='utf-8'))
-            except Exception as e:
-                print(f'Warning: failed reading placement profile: {e}')
-
     root = Path(args.data_root)
-    src_img_dir = root / 'images' / args.class_name
-    src_lbl_dir = root / 'labels' / args.class_name
 
     run_name = args.run_name.strip() or datetime.now().strftime('run_%Y%m%d_%H%M%S')
     out_img_dir = root / 'images' / args.class_name / 'synth_multi_runs' / run_name
@@ -189,247 +228,87 @@ def main():
     if not bg_files:
         raise RuntimeError('No background images found')
 
-    cutouts = []
-    for im in sorted(src_img_dir.rglob('*')):
-        if im.suffix.lower() not in IMG_EXTS:
-            continue
-        rel = im.relative_to(src_img_dir)
-        if any(tag in rel.parts for tag in ['synth_runs', 'obs_runs', 'synth_multi_runs']):
-            continue
-        if any(tag in im.stem for tag in ['_synth_', '_obs_']):
-            continue
-        src = cv2.imread(str(im))
-        if src is None:
-            continue
-        h, w = src.shape[:2]
-        lb = (src_lbl_dir / rel).with_suffix('.txt')
-        if not lb.exists():
-            continue
-        polys = load_yolo_polys(lb, w, h)
-        if not polys:
-            continue
-        cls_id, poly = polys[0]
-        m = poly_to_mask(poly, w, h)
-        x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
-        crop = src[y:y + bh, x:x + bw]
-        crop_m = m[y:y + bh, x:x + bw]
-        if crop.size > 0 and (crop_m > 0).sum() > 20:
-            cutouts.append((cls_id, crop, crop_m))
-
-    if not cutouts:
-        raise RuntimeError('No valid source cutouts found for multi-instance synth')
+    if not args.placement_profile.strip():
+        raise RuntimeError('placement_profile is required for multi-instance generation')
+    profile_data = core_load_profile(Path(args.placement_profile))
+    cutouts = core_collect_cutouts(root, args.class_name)
+    reference_long_side = float(cutouts[0]['long_side'])
 
     preview_frames = []
     target_n = args.preview_count if args.preview_only else args.num_synthetic
+    stem_prefix = f'{args.class_name}_synthmulti'
+    next_idx = core_next_output_index(out_img_dir, stem_prefix)
 
-    min_req = max(1, int(args.min_objects))
-    max_req = max(min_req, int(args.max_objects))
-
-    made = 0
-    for i in range(target_n):
-        bg, bg_path = pick_random_background(bg_files)
-        h, w = bg.shape[:2]
-
-        prof = profile_for_bg(args, bg_path)
-        min_scale_eff = float(args.min_scale)
-        max_scale_eff = float(args.max_scale)
-        bg_bri_min_eff = float(args.brightness_min)
-        bg_bri_max_eff = float(args.brightness_max)
-        obj_bri_min_eff = float(args.object_brightness_min)
-        obj_bri_max_eff = float(args.object_brightness_max)
-        poly_px = None
-        if isinstance(prof, dict):
-            min_scale_eff = float(prof.get('min_scale', min_scale_eff))
-            max_scale_eff = float(prof.get('max_scale', max_scale_eff))
-            bg_bri_min_eff = float(prof.get('bg_brightness_min', bg_bri_min_eff))
-            bg_bri_max_eff = float(prof.get('bg_brightness_max', bg_bri_max_eff))
-            obj_bri_min_eff = float(prof.get('obj_brightness_min', obj_bri_min_eff))
-            obj_bri_max_eff = float(prof.get('obj_brightness_max', obj_bri_max_eff))
-            if args.class_name and isinstance(prof.get('class_settings'), dict):
-                cset = prof.get('class_settings', {})
-                cs = cset.get(args.class_name)
-                if cs is None:
-                    want = str(args.class_name).strip().lower()
-                    for ck, cv in cset.items():
-                        if str(ck).strip().lower() == want:
-                            cs = cv
-                            break
-                if isinstance(cs, dict):
-                    min_scale_eff = float(cs.get('min_scale', min_scale_eff))
-                    max_scale_eff = float(cs.get('max_scale', max_scale_eff))
-                    bg_bri_min_eff = float(cs.get('bg_brightness_min', bg_bri_min_eff))
-                    bg_bri_max_eff = float(cs.get('bg_brightness_max', bg_bri_max_eff))
-                    obj_bri_min_eff = float(cs.get('obj_brightness_min', obj_bri_min_eff))
-                    obj_bri_max_eff = float(cs.get('obj_brightness_max', obj_bri_max_eff))
-            p = prof.get('poly')
-            if isinstance(p, list) and len(p) >= 3:
-                poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in p]
-
-        target_obj = random.randint(min_req, max_req)
-
-        visible_masks = []
-        centers = []
-        attempts = 0
-        # Keep trying random cutouts until we either hit target or exhaust budget.
-        # Preview should stay snappy.
-        max_place_attempts = max(30, target_obj * (20 if args.preview_only else 60))
-        while len(visible_masks) < target_obj and attempts < max_place_attempts:
-            attempts += 1
-            cls_id, crop, crop_m = random.choice(cutouts)
-            ch, cw = crop_m.shape[:2]
-            if args.preview_mode == 'min_scale':
-                scale = min(min_scale_eff, max_scale_eff)
-            elif args.preview_mode == 'max_scale':
-                scale = max(min_scale_eff, max_scale_eff)
-            else:
-                scale = random.uniform(min(min_scale_eff, max_scale_eff), max(min_scale_eff, max_scale_eff))
-            tw = max(8, int(cw * scale))
-            th = max(8, int(ch * scale))
-            c_r = cv2.resize(crop, (tw, th), interpolation=cv2.INTER_LINEAR)
-            m_r = cv2.resize(crop_m, (tw, th), interpolation=cv2.INTER_NEAREST)
-
-            angle = random.uniform(-args.max_rotation, args.max_rotation)
-            c_rr, m_rr = rotate_bound_pair(c_r, m_r, angle)
-            ys, xs = np.where(m_rr > 0)
-            if len(xs) < 20:
-                continue
-            x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
-            c_rr = c_rr[y1:y2 + 1, x1:x2 + 1]
-            m_rr = m_rr[y1:y2 + 1, x1:x2 + 1]
-            oh, ow = m_rr.shape[:2]
-            if ow >= w or oh >= h:
-                continue
-
-            placed = False
-            new_full = None
-            for _try in range(40):
-                if visible_masks:
-                    # Keep cluster tight around existing centers.
-                    if random.random() < args.overlap_prob:
-                        prev = random.choice(visible_masks)
-                        pyx = np.column_stack(np.where(prev > 0))
-                        if len(pyx) > 0:
-                            yy, xx = pyx[random.randrange(len(pyx))]
-                            jx = int(random.uniform(-1, 1) * args.overlap_spread * ow)
-                            jy = int(random.uniform(-1, 1) * args.overlap_spread * oh)
-                            px = int(np.clip(xx - ow // 2 + jx, 0, w - ow))
-                            py = int(np.clip(yy - oh // 2 + jy, 0, h - oh))
-                        else:
-                            px = random.randint(0, w - ow)
-                            py = random.randint(0, h - oh)
-                    else:
-                        # Side-by-side/touching tendency near cluster center
-                        cx, cy = centers[random.randrange(len(centers))]
-                        dmax = int(args.cluster_distance_factor * max(ow, oh))
-                        jx = random.randint(-dmax, dmax)
-                        jy = random.randint(-dmax, dmax)
-                        px = int(np.clip(cx - ow // 2 + jx, 0, w - ow))
-                        py = int(np.clip(cy - oh // 2 + jy, 0, h - oh))
-                else:
-                    px = random.randint(0, w - ow)
-                    py = random.randint(0, h - oh)
-
-                if poly_px is not None and not bbox_fully_inside_poly(px, py, ow, oh, poly_px):
-                    continue
-
-                cand = np.zeros((h, w), dtype=np.uint8)
-                cand[py:py + oh, px:px + ow][m_rr > 0] = 255
-
-                # Enforce max overlap (<= 50% default) with every existing instance.
-                ok_overlap = True
-                cand_area = max(1, int((cand > 0).sum()))
-                for pm in visible_masks:
-                    inter = int(((pm > 0) & (cand > 0)).sum())
-                    prev_area = max(1, int((pm > 0).sum()))
-                    if (inter / cand_area) > args.max_overlap_ratio or (inter / prev_area) > args.max_overlap_ratio:
-                        ok_overlap = False
-                        break
-
-                # Keep cluster reasonably tight: center not too far from any existing center.
-                if ok_overlap and centers:
-                    cx_new = px + ow // 2
-                    cy_new = py + oh // 2
-                    nearest = min([((cx_new - cx) ** 2 + (cy_new - cy) ** 2) ** 0.5 for cx, cy in centers])
-                    if nearest > args.cluster_distance_factor * max(ow, oh):
-                        ok_overlap = False
-
-                if ok_overlap:
-                    new_full = cand
-                    placed = True
-                    break
-
-            if not placed or new_full is None:
-                continue
-
-            obj_beta = random.uniform(obj_bri_min_eff, obj_bri_max_eff)
-            c_rr = cv2.convertScaleAbs(c_rr, alpha=1.0, beta=obj_beta)
-
-            # Occlusion handling: new object is on top, subtract from previous visible masks
-            updated_prev = []
-            for pm in visible_masks:
-                vis = ((pm > 0) & (new_full == 0)).astype(np.uint8) * 255
-                if vis.sum() > 20:
-                    updated_prev.append(vis)
-            visible_masks = updated_prev
-
-            # Blend new object
-            roi = bg[py:py + oh, px:px + ow]
-            aa = m_rr > 0
-            roi[aa] = c_rr[aa]
-            bg[py:py + oh, px:px + ow] = roi
-            visible_masks.append(new_full)
-            ys2, xs2 = np.where(new_full > 0)
-            if len(xs2) > 0:
-                centers.append((int(xs2.mean()), int(ys2.mean())))
-
-        if args.preview_mode == 'bg_bri_min':
-            bg_beta = float(bg_bri_min_eff)
-        elif args.preview_mode == 'bg_bri_max':
-            bg_beta = float(bg_bri_max_eff)
-        else:
-            bg_beta = random.uniform(bg_bri_min_eff, bg_bri_max_eff)
-        bg = cv2.convertScaleAbs(bg, alpha=1.0, beta=bg_beta)
-
+    def _consume_scene(scene, made_count):
+        if scene is None:
+            return False
+        h, w = scene['image'].shape[:2]
         polys_new = []
-        for vm in visible_masks:
+        for vm in scene['visible_masks']:
             p = mask_to_polygon(vm)
             if p is not None:
                 polys_new.append(p)
+        if len(polys_new) < args.min_objects:
+            return False
 
-        if len(polys_new) < min_req:
-            # For preview, allow partial samples so user always gets visual feedback quickly.
-            if not args.preview_only or len(polys_new) == 0:
-                continue
-
-        stem = f'{args.class_name}_synthmulti_{i + 1:06d}'
+        stem = f'{stem_prefix}_{next_idx + made_count:06d}'
         out_img = out_img_dir / f'{stem}.jpg'
         out_lbl = out_lbl_dir / f'{stem}.txt'
         out_viz = out_viz_dir / f'{stem}_overlay.jpg'
 
-        viz = bg.copy()
-        colors = [(255, 80, 80), (80, 255, 80), (80, 160, 255), (255, 220, 80), (255, 80, 220), (120, 255, 255), (220, 120, 255)]
-        for j, vm in enumerate(visible_masks):
-            col = colors[j % len(colors)]
-            # translucent per-instance mask fill
-            tint = np.zeros_like(viz)
-            tint[:, :] = col
-            aa = vm > 0
-            viz[aa] = cv2.addWeighted(viz[aa], 0.55, tint[aa], 0.45, 0)
-        for j, p in enumerate(polys_new):
-            col = colors[j % len(colors)]
-            cv2.drawContours(viz, [p.astype(np.int32).reshape(-1, 1, 2)], -1, col, 2)
-        if poly_px is not None:
-            cv2.polylines(viz, [np.array(poly_px, dtype=np.int32).reshape(-1, 1, 2)], True, (0, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(viz, f'instances={len(polys_new)} target={target_obj} mode={args.preview_mode}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.imwrite(str(out_viz), viz)
-
         if args.preview_only:
-            preview_frames.append(viz)
+            preview_frames.append(scene['overlay'])
         else:
-            cv2.imwrite(str(out_img), bg)
+            cv2.imwrite(str(out_img), scene['image'])
             write_yolo_multi(out_lbl, args.class_id, polys_new, w, h)
+        cv2.imwrite(str(out_viz), scene['overlay'])
+        return True
 
-        made += 1
+    made = 0
+    workers = max(1, int(args.workers or 1))
+    if args.preview_only or workers == 1:
+        while made < target_n:
+            scene = core_build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side)
+            if scene is None:
+                break
+            if _consume_scene(scene, made):
+                made += 1
+    else:
+        worker_config = {
+            'args': vars(args).copy(),
+            'data_root': str(root),
+            'placement_profile': args.placement_profile,
+            'bg_files': [str(p) for p in bg_files],
+        }
+        task_idx = 0
+        attempts = 0
+        max_attempts = max(target_n * 6, workers * 4)
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_worker_init,
+            initargs=(worker_config,),
+        ) as ex:
+            futures = {}
+            while len(futures) < workers * 2 and attempts < max_attempts:
+                fut = ex.submit(_worker_generate_scene, task_idx)
+                futures[fut] = task_idx
+                task_idx += 1
+                attempts += 1
+
+            while futures and made < target_n:
+                done, _ = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_COMPLETED)
+                for fut in done:
+                    futures.pop(fut, None)
+                    scene = fut.result()
+                    if _consume_scene(scene, made):
+                        made += 1
+                        if made >= target_n:
+                            break
+                    if attempts < max_attempts and made < target_n:
+                        nf = ex.submit(_worker_generate_scene, task_idx)
+                        futures[nf] = task_idx
+                        task_idx += 1
+                        attempts += 1
 
     print(f'Multi-instance synthetic created: {made}')
     if args.preview_only and made == 0:
