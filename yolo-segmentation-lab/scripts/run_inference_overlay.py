@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 import argparse
+import json
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from datetime import datetime
 import numpy as np
 from ultralytics import YOLO
 import cv2
+from pickable_instance import select_pickable_instance
+from instance_tracker import update_tracks
 
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
 
@@ -33,6 +39,7 @@ def main():
     ap.add_argument('--grip-model', default='', help='Pose model weights for grip keypoints (best.pt)')
     ap.add_argument('--grip-conf', type=float, default=0.20)
     ap.add_argument('--mask-smooth', type=int, default=2, help='Mask smoothing strength (0=off, higher=smoother)')
+    ap.add_argument('--pick-overlay', action='store_true', help='Highlight the most free/pickable object')
     args = ap.parse_args()
 
     source = 0 if args.source == '0' else args.source
@@ -46,6 +53,20 @@ def main():
     writer = None
     save_path = None
     frame_idx = 0
+    prev_mask_overlay = None
+    prev_mask_alpha = None
+    prev_pick_center = None
+    tracks = {}
+    next_track_id = 1
+    manual_selected_track_id = None
+    toolbox_proc = None
+    toolbox_cmd_path = Path(tempfile.gettempdir()) / f'infer_toolbox_cmd_{Path(__file__).stem}_{id(object())}.json'
+    toolbox_status_path = Path(tempfile.gettempdir()) / f'infer_toolbox_status_{Path(__file__).stem}_{id(object())}.json'
+    toolbox_paused = False
+    toolbox_choose_mode = False
+    toolbox_last_seq = -1
+    display_scale = 1.0
+    last_render_shape = None
 
     palette = [
         (255, 90, 90),
@@ -55,6 +76,43 @@ def main():
         (255, 90, 220),
         (90, 255, 255),
     ]
+    try:
+        toolbox_proc = subprocess.Popen([
+            sys.executable,
+            str(Path(__file__).with_name('inference_toolbox.py')),
+            '--command-file', str(toolbox_cmd_path),
+            '--status-file', str(toolbox_status_path),
+        ])
+    except Exception:
+        toolbox_proc = None
+
+    def choose_track_at(x, y):
+        nonlocal manual_selected_track_id, toolbox_choose_mode
+        if last_render_shape is None:
+            return
+        scale = max(1e-6, float(display_scale))
+        fx = int(round(x / scale))
+        fy = int(round(y / scale))
+        candidates = []
+        for track_id, track in tracks.items():
+            x1, y1, x2, y2 = [int(round(v)) for v in track['box']]
+            if x1 <= fx <= x2 and y1 <= fy <= y2:
+                cx = 0.5 * (x1 + x2)
+                cy = 0.5 * (y1 + y2)
+                dist2 = (fx - cx) ** 2 + (fy - cy) ** 2
+                candidates.append((dist2, track_id))
+        if candidates:
+            manual_selected_track_id = min(candidates)[1]
+            toolbox_choose_mode = False
+            toolbox_status_path.write_text(json.dumps({'status': f'Selected object {manual_selected_track_id}'}), encoding='utf-8')
+        else:
+            toolbox_status_path.write_text(json.dumps({'status': 'No object under click'}), encoding='utf-8')
+
+    def on_mouse(event, x, y, _flags, _param):
+        if event == cv2.EVENT_LBUTTONDOWN and toolbox_choose_mode:
+            choose_track_at(x, y)
+
+    cv2.setMouseCallback(win, on_mouse)
 
     def is_image_source(src):
         if not isinstance(src, str):
@@ -64,65 +122,134 @@ def main():
     def smooth_polygon(poly, smooth_strength):
         if smooth_strength <= 0 or poly is None or len(poly) < 5:
             return poly
-        p = np.round(poly).astype(np.int32)
-        x1, y1 = p[:, 0].min(), p[:, 1].min()
-        x2, y2 = p[:, 0].max(), p[:, 1].max()
-        pad = max(3, int(smooth_strength) * 2)
-        w = max(8, int(x2 - x1 + 1 + 2 * pad))
-        h = max(8, int(y2 - y1 + 1 + 2 * pad))
-
-        local = np.zeros((h, w), dtype=np.uint8)
-        q = p.copy()
-        q[:, 0] = q[:, 0] - x1 + pad
-        q[:, 1] = q[:, 1] - y1 + pad
-        cv2.fillPoly(local, [q.reshape(-1, 1, 2)], 255)
-
-        k = max(3, 2 * int(smooth_strength) + 1)
-        local = cv2.GaussianBlur(local, (k, k), 0)
-        _, local = cv2.threshold(local, 127, 255, cv2.THRESH_BINARY)
-
-        cnts, _ = cv2.findContours(local, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        if not cnts:
-            return poly
-        c = max(cnts, key=cv2.contourArea).reshape(-1, 2).astype(np.float32)
-        c[:, 0] = c[:, 0] + x1 - pad
-        c[:, 1] = c[:, 1] + y1 - pad
-        return c
+        pts = np.round(poly).astype(np.float32).reshape(-1, 1, 2)
+        peri = cv2.arcLength(pts, True)
+        eps = max(0.8, float(smooth_strength) * 0.0035 * peri)
+        approx = cv2.approxPolyDP(pts, eps, True)
+        return approx.reshape(-1, 2).astype(np.float32) if approx is not None and len(approx) >= 3 else poly
 
     def render_result(r):
+        nonlocal prev_mask_overlay, prev_mask_alpha, prev_pick_center, tracks, next_track_id, manual_selected_track_id
         if getattr(r, 'orig_img', None) is None:
             frame = r.plot()
             return frame, 0
 
         frame = r.orig_img.copy()
-        overlay = frame.copy()
+        overlay = np.zeros_like(frame, dtype=np.float32)
+        alpha_layer = np.zeros(frame.shape[:2], dtype=np.float32)
         count = 0
 
         if r.masks is not None and getattr(r.masks, 'xy', None) is not None:
             polys = r.masks.xy
             count = len(polys)
             smoothed_polys = []
-            for i, poly in enumerate(polys):
-                color = palette[i % len(palette)]
-                if poly is None or len(poly) < 3:
-                    smoothed_polys.append(None)
-                    continue
-                sp = smooth_polygon(poly, args.mask_smooth)
-                smoothed_polys.append(sp)
-                pts = sp.astype('int32').reshape(-1, 1, 2)
-                cv2.fillPoly(overlay, [pts], color)
+            best_track_id = None
+            best_local_idx = None
+            pick_infos = []
+            boxes_xyxy = r.boxes.xyxy.cpu().numpy() if r.boxes is not None and getattr(r.boxes, 'xyxy', None) is not None else None
+            detections = []
+            if boxes_xyxy is not None:
+                for i, poly in enumerate(polys):
+                    if poly is None or len(poly) < 3 or i >= len(boxes_xyxy):
+                        smoothed_polys.append(None)
+                        continue
+                    sp = smooth_polygon(poly, args.mask_smooth if args.pick_overlay else min(args.mask_smooth, 1))
+                    smoothed_polys.append(sp)
+                    detections.append({'poly': sp, 'box': tuple(float(v) for v in boxes_xyxy[i])})
+                tracks, next_track_id = update_tracks(tracks, next_track_id, detections, frame.shape, max_missed=2)
+            else:
+                tracks = {}
+            if args.pick_overlay:
+                active_boxes = [tracks[tid]['box'] for tid in tracks if tracks[tid].get('matched')]
+                best_local_idx, pick_infos = select_pickable_instance(active_boxes, frame.shape)
+                matched_track_ids = [tid for tid in tracks if tracks[tid].get('matched')]
+                best_track_id = matched_track_ids[best_local_idx] if best_local_idx is not None and best_local_idx < len(matched_track_ids) else None
+                if manual_selected_track_id is not None:
+                    best_track_id = manual_selected_track_id if manual_selected_track_id in tracks else None
+                for track_id, track in tracks.items():
+                    poly = track.get('poly')
+                    if poly is None or len(poly) < 3:
+                        continue
+                    color = palette[(track_id - 1) % len(palette)]
+                    pts = poly.astype('int32').reshape(-1, 1, 2)
+                    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                    cv2.fillPoly(mask, [pts], 255)
+                    sel = mask > 0
+                    overlay[sel] = color
+                    base_alpha = 0.10 if not track.get('matched') else 0.18
+                    hi_alpha = 0.16 if not track.get('matched') else 0.24
+                    alpha_layer[sel] = np.maximum(alpha_layer[sel], hi_alpha if track_id == best_track_id else base_alpha)
 
-            # Blend once to preserve image quality (avoid repeated resampling)
-            frame = cv2.addWeighted(frame, 0.62, overlay, 0.38, 0.0)
+                if prev_mask_overlay is not None and prev_mask_overlay.shape == overlay.shape:
+                    overlay = 0.45 * prev_mask_overlay + 0.55 * overlay
+                    alpha_layer = 0.45 * prev_mask_alpha + 0.55 * alpha_layer
+                prev_mask_overlay = overlay.copy()
+                prev_mask_alpha = alpha_layer.copy()
 
-            for i, poly in enumerate(smoothed_polys):
-                color = palette[i % len(palette)]
+                frame_f = frame.astype(np.float32)
+                frame = np.clip(frame_f * (1.0 - alpha_layer[:, :, None]) + overlay * alpha_layer[:, :, None], 0, 255).astype(np.uint8)
+            else:
+                prev_mask_overlay = None
+                prev_mask_alpha = None
+                prev_pick_center = None
+                simple_overlay = frame.copy()
+                for track_id, track in tracks.items():
+                    poly = track.get('poly')
+                    if poly is None or len(poly) < 3:
+                        continue
+                    pts = poly.astype('int32').reshape(-1, 1, 2)
+                    color = palette[(track_id - 1) % len(palette)]
+                    cv2.fillPoly(simple_overlay, [pts], color)
+                frame = cv2.addWeighted(frame, 0.80, simple_overlay, 0.20, 0.0)
+
+            for track_id, track in tracks.items():
+                poly = track.get('poly')
                 if poly is None or len(poly) < 3:
                     continue
-                pts = poly.astype('int32').reshape(-1, 1, 2)
-                cv2.polylines(frame, [pts], True, color, 2, cv2.LINE_AA)
                 cx, cy = int(poly[:, 0].mean()), int(poly[:, 1].mean())
-                cv2.putText(frame, str(i + 1), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+                color = palette[(track_id - 1) % len(palette)]
+                if args.pick_overlay and track_id == best_track_id:
+                    if prev_pick_center is not None:
+                        cx = int(round(0.55 * prev_pick_center[0] + 0.45 * cx))
+                        cy = int(round(0.55 * prev_pick_center[1] + 0.45 * cy))
+                    prev_pick_center = (cx, cy)
+                    x1, y1, x2, y2 = [int(round(v)) for v in track['box']]
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.circle(frame, (cx, cy), 7, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.putText(frame, f'PICK {track_id}', (cx + 10, cy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255, 255, 255), 2, cv2.LINE_AA)
+                else:
+                    text_col = color if track.get('matched') else (180, 180, 180)
+                    cv2.putText(frame, str(track_id), (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.62, text_col, 2, cv2.LINE_AA)
+
+            if args.pick_overlay and manual_selected_track_id is None and best_track_id is not None and best_local_idx is not None and 0 <= best_local_idx < len(pick_infos):
+                info = pick_infos[best_local_idx]
+                cv2.putText(
+                    frame,
+                    f'pick={best_track_id} free={info["score"]:.2f} contacts={info["contact_count"]}',
+                    (12, 62),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.70,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            elif best_track_id is not None:
+                cv2.putText(
+                    frame,
+                    f'pick={best_track_id}',
+                    (12, 62),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.70,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+        else:
+            prev_mask_overlay = None
+            prev_mask_alpha = None
+            prev_pick_center = None
+            tracks = {}
+            manual_selected_track_id = None
 
         cv2.putText(frame, f'count={count}', (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
         if count == 0 and r.boxes is not None and len(r.boxes) > 0:
@@ -247,9 +374,11 @@ def main():
         print(f'Saved overlay image: {save_path}')
 
     def show_and_maybe_save(frame, wait_ms=1):
-        nonlocal writer, save_path
+        nonlocal writer, save_path, display_scale, last_render_shape
         h, w = frame.shape[:2]
+        last_render_shape = frame.shape[:2]
         scale = min(args.view_width / max(w, 1), args.view_height / max(h, 1), 1.0)
+        display_scale = scale
         if scale < 1.0:
             frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
@@ -288,6 +417,31 @@ def main():
             print(f'frame {frame_idx}: count={count}')
         return frame, count
 
+    def step_toolbox():
+        nonlocal manual_selected_track_id, toolbox_paused, toolbox_choose_mode, toolbox_last_seq
+        if toolbox_proc is None:
+            return True
+        if toolbox_proc.poll() is not None:
+            return False
+        try:
+            if toolbox_cmd_path.exists():
+                data = json.loads(toolbox_cmd_path.read_text(encoding='utf-8'))
+                seq = int(data.get('seq', -1))
+                if seq > toolbox_last_seq:
+                    toolbox_last_seq = seq
+                    cmd = str(data.get('command', '')).strip()
+                    if cmd == 'toggle_pause':
+                        toolbox_paused = not toolbox_paused
+                    elif cmd == 'choose_object':
+                        toolbox_paused = True
+                        toolbox_choose_mode = True
+                    elif cmd == 'clear_selection':
+                        manual_selected_track_id = None
+                    toolbox_status_path.write_text(json.dumps({'status': 'Paused - click object in video' if toolbox_choose_mode else ('Paused' if toolbox_paused else 'Running')}), encoding='utf-8')
+        except Exception:
+            pass
+        return True
+
     if source == 0:
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
@@ -297,17 +451,28 @@ def main():
 
         actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
         actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        last_frame = None
         print(f'Webcam capture resolution requested: {args.cam_width}x{args.cam_height}')
         print(f'Webcam capture resolution actual: {actual_w}x{actual_h}')
 
         while True:
-            ok, raw = cap.read()
-            if not ok:
+            if not step_toolbox():
                 break
-            frame, _ = process_raw_frame(raw)
-            key = show_and_maybe_save(add_controls_overlay(frame, 'webcam mode'))
+            if not toolbox_paused or last_frame is None:
+                ok, raw = cap.read()
+                if not ok:
+                    break
+                frame, _ = process_raw_frame(raw)
+                last_frame = frame
+            shown = add_controls_overlay(last_frame, 'webcam mode', paused=toolbox_paused)
+            if toolbox_choose_mode:
+                cv2.putText(shown, 'CLICK OBJECT TO SELECT', (12, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 220, 255), 2, cv2.LINE_AA)
+            key = show_and_maybe_save(shown)
             if key in (ord('q'), 27):
                 break
+            if key == ord(' '):
+                toolbox_paused = not toolbox_paused
+                toolbox_status_path.write_text(json.dumps({'status': 'Paused' if toolbox_paused else 'Running'}), encoding='utf-8')
         cap.release()
     else:
         if is_image_source(source):
@@ -328,7 +493,6 @@ def main():
             if not cap.isOpened():
                 raise RuntimeError(f'Cannot open video source: {source}')
 
-            paused = False
             last_frame = None
             video_name = Path(source).name
 
@@ -338,6 +502,9 @@ def main():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, target)
 
             while True:
+                if not step_toolbox():
+                    break
+                paused = toolbox_paused
                 if not paused or last_frame is None:
                     ok, raw = cap.read()
                     if not ok:
@@ -346,14 +513,18 @@ def main():
                     last_frame = frame
 
                 shown = add_controls_overlay(last_frame, f'video mode: {video_name}', paused=paused)
+                if toolbox_choose_mode:
+                    cv2.putText(shown, 'CLICK OBJECT TO SELECT', (12, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 220, 255), 2, cv2.LINE_AA)
                 key = show_and_maybe_save(shown, wait_ms=0 if paused else 1)
                 if key in (ord('q'), 27):
                     break
                 if key == ord(' '):
-                    paused = not paused
+                    toolbox_paused = not toolbox_paused
+                    toolbox_status_path.write_text(json.dumps({'status': 'Paused' if toolbox_paused else 'Running'}), encoding='utf-8')
                     continue
                 if key == ord('n'):
-                    paused = True
+                    toolbox_paused = True
+                    toolbox_status_path.write_text(json.dumps({'status': 'Paused'}), encoding='utf-8')
                     ok, raw = cap.read()
                     if not ok:
                         break
@@ -362,12 +533,14 @@ def main():
                     continue
                 if key == ord('j'):
                     seek_relative(-30)
-                    paused = True
+                    toolbox_paused = True
+                    toolbox_status_path.write_text(json.dumps({'status': 'Paused'}), encoding='utf-8')
                     last_frame = None
                     continue
                 if key == ord('k'):
                     seek_relative(30)
-                    paused = True
+                    toolbox_paused = True
+                    toolbox_status_path.write_text(json.dumps({'status': 'Paused'}), encoding='utf-8')
                     last_frame = None
                     continue
 
@@ -377,6 +550,8 @@ def main():
         writer.release()
         print(f'Saved overlay video: {save_path}')
 
+    if toolbox_proc is not None and toolbox_proc.poll() is None:
+        toolbox_proc.terminate()
     cv2.destroyAllWindows()
 
 

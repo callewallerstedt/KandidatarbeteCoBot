@@ -162,9 +162,13 @@ class App(tk.Tk):
             'auto_poly_eps_var': self.auto_poly_eps_var,
             'auto_alpha_thr_var': self.auto_alpha_thr_var,
             'auto_bg_color_thr_var': self.auto_bg_color_thr_var,
+            'auto_magenta_bg_boost_var': self.auto_magenta_bg_boost_var,
+            'auto_magenta_key_thr_var': self.auto_magenta_key_thr_var,
             'auto_mask_upscale_var': self.auto_mask_upscale_var,
             'auto_keep_largest_var': self.auto_keep_largest_var,
             'auto_preview_count_var': self.auto_preview_count_var,
+            'auto_preview_hide_bg_var': self.auto_preview_hide_bg_var,
+            'auto_preview_overlay_mask_var': self.auto_preview_overlay_mask_var,
             'synth_place_rect_var': self.synth_place_rect_var,
             'synth_place_profile_var': self.synth_place_profile_var,
             'synth_bg_video_var': self.synth_bg_video_var,
@@ -173,6 +177,7 @@ class App(tk.Tk):
             'synth_temp_variance_var': self.synth_temp_variance_var,
             'synth_shade_prob_var': self.synth_shade_prob_var,
             'synth_shade_strength_var': self.synth_shade_strength_var,
+            'synth_source_run_filter_var': self.synth_source_run_filter_var,
             'synth_multi_class_var': self.synth_multi_class_var,
             'synth_multi_class_id_var': self.synth_multi_class_id_var,
             'synth_multi_bg_dir_var': self.synth_multi_bg_dir_var,
@@ -188,6 +193,7 @@ class App(tk.Tk):
             'synth_multi_temp_variance_var': self.synth_multi_temp_variance_var,
             'synth_multi_shade_prob_var': self.synth_multi_shade_prob_var,
             'synth_multi_shade_strength_var': self.synth_multi_shade_strength_var,
+            'synth_multi_source_run_filter_var': self.synth_multi_source_run_filter_var,
             'synth_multi_place_profile_var': self.synth_multi_place_profile_var,
             'synth_multi_preview_mode_var': self.synth_multi_preview_mode_var,
             'synth_multi_preview_count_var': self.synth_multi_preview_count_var,
@@ -202,6 +208,7 @@ class App(tk.Tk):
             'synth_all_multi_min_scale_var': self.synth_all_multi_min_scale_var,
             'synth_all_multi_max_scale_var': self.synth_all_multi_max_scale_var,
             'synth_all_multi_spread_var': self.synth_all_multi_spread_var,
+            'synth_all_source_run_filter_var': self.synth_all_source_run_filter_var,
             'model_var': self.model_var,
             'epochs_var': self.epochs_var,
             'imgsz_var': self.imgsz_var,
@@ -549,9 +556,13 @@ class App(tk.Tk):
         self.auto_poly_eps_var = tk.StringVar(value='0.00035')
         self.auto_alpha_thr_var = tk.StringVar(value='100')
         self.auto_bg_color_thr_var = tk.StringVar(value='0')
+        self.auto_magenta_bg_boost_var = tk.BooleanVar(value=True)
+        self.auto_magenta_key_thr_var = tk.StringVar(value='24')
         self.auto_mask_upscale_var = tk.StringVar(value='1')
         self.auto_keep_largest_var = tk.BooleanVar(value=True)
         self.auto_preview_count_var = tk.StringVar(value='2')
+        self.auto_preview_hide_bg_var = tk.BooleanVar(value=True)
+        self.auto_preview_overlay_mask_var = tk.BooleanVar(value=True)
         self.classes_var = tk.StringVar(value='object_name')
         self.split_mode_var = tk.StringVar(value='all')
         self.split_class_var = tk.StringVar(value='ALL classes')
@@ -615,39 +626,46 @@ class App(tk.Tk):
 
         ttk.Label(frm, text='Preview count').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.auto_preview_count_var, width=8).grid(row=12, column=1, sticky='w')
-        ttk.Button(frm, text='Preview auto-labeled frames', command=self.preview_autolabel).grid(row=12, column=2, sticky='w')
+        ttk.Checkbutton(frm, text='Boost magenta bg removal', variable=self.auto_magenta_bg_boost_var).grid(row=12, column=2, sticky='w')
 
-        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=13, column=0, pady=8)
-        ttk.Button(frm, text='Rank realistic source images', command=self.rank_realistic_sources).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Magenta key strength').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.auto_magenta_key_thr_var, width=8).grid(row=13, column=1, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=14, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=15, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_dir_var, width=70).grid(row=15, column=1, sticky='we')
-        ttk.Button(frm, text='Browse', command=self.pick_unity_dir).grid(row=15, column=2)
+        ttk.Checkbutton(frm, text='Hide BG in preview', variable=self.auto_preview_hide_bg_var).grid(row=14, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Overlay mask in preview', variable=self.auto_preview_overlay_mask_var).grid(row=14, column=1, sticky='w')
+        ttk.Button(frm, text='Preview auto-labeled frames', command=self.preview_autolabel).grid(row=14, column=2, sticky='w')
 
-        ttk.Label(frm, text='Pairing is automatic by relative path/name (single folder workflow)').grid(row=16, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Auto-label from video', command=self.autolabel).grid(row=15, column=0, pady=8)
+        ttk.Button(frm, text='Rank realistic source images', command=self.rank_realistic_sources).grid(row=15, column=1, pady=8, sticky='w')
 
-        ttk.Label(frm, text='Unity run name (optional)').grid(row=17, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=17, column=1, sticky='w')
-        ttk.Label(frm, text='Red threshold').grid(row=17, column=1, padx=(320,0), sticky='w')
-        ttk.Entry(frm, textvariable=self.unity_red_thr_var, width=8).grid(row=17, column=2, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=16, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='Unity export folder (contains RGB/ and MASK/)').grid(row=17, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_dir_var, width=70).grid(row=17, column=1, sticky='we')
+        ttk.Button(frm, text='Browse', command=self.pick_unity_dir).grid(row=17, column=2)
 
-        ttk.Button(frm, text='Import Unity RGB + red masks', command=self.import_unity_red_masks).grid(row=18, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='Pairing is automatic by relative path/name (single folder workflow)').grid(row=18, column=0, columnspan=3, sticky='w')
 
-        ttk.Label(frm, text='Split mode').grid(row=19, column=1, sticky='e')
-        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs', 'unity'], state='readonly', width=10).grid(row=19, column=2, sticky='w')
+        ttk.Label(frm, text='Unity run name (optional)').grid(row=19, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_run_var, width=40).grid(row=19, column=1, sticky='w')
+        ttk.Label(frm, text='Red threshold').grid(row=19, column=1, padx=(320,0), sticky='w')
+        ttk.Entry(frm, textvariable=self.unity_red_thr_var, width=8).grid(row=19, column=2, sticky='w')
 
-        ttk.Label(frm, text='Split class').grid(row=20, column=0, sticky='w')
+        ttk.Button(frm, text='Import Unity RGB + red masks', command=self.import_unity_red_masks).grid(row=20, column=0, pady=8, sticky='w')
+
+        ttk.Label(frm, text='Split mode').grid(row=21, column=1, sticky='e')
+        ttk.Combobox(frm, textvariable=self.split_mode_var, values=['all', 'real', 'synth', 'obs', 'unity'], state='readonly', width=10).grid(row=21, column=2, sticky='w')
+
+        ttk.Label(frm, text='Split class').grid(row=22, column=0, sticky='w')
         self.split_class_cb = ttk.Combobox(frm, textvariable=self.split_class_var, state='readonly', width=28)
-        self.split_class_cb.grid(row=20, column=1, sticky='w')
+        self.split_class_cb.grid(row=22, column=1, sticky='w')
 
-        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=21, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=21, column=1, sticky='w')
+        ttk.Label(frm, text='Run filter (optional). Example: combo01 to include combo01_bg + combo01_multi + combo01_obs').grid(row=23, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=23, column=1, sticky='w')
 
-        ttk.Label(frm, text='all = all data | real = no synth/obs/unity | synth = synth runs | obs = obs runs | unity = unity runs').grid(row=22, column=0, columnspan=3, sticky='w')
-        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=23, column=0, pady=8, sticky='w')
+        ttk.Label(frm, text='all = all data | real = no synth/obs/unity | synth = synth runs | obs = obs runs | unity = unity runs').grid(row=24, column=0, columnspan=3, sticky='w')
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=25, column=0, pady=8, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=24, column=0, columnspan=3, sticky='we', pady=8)
+        ttk.Separator(frm, orient='horizontal').grid(row=26, column=0, columnspan=3, sticky='we', pady=8)
 
         ttk.Label(frm, text='All classes (space-separated, in class-id order)').grid(row=25, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.classes_var, width=70).grid(row=25, column=1, sticky='we')
@@ -672,6 +690,7 @@ class App(tk.Tk):
         self.synth_temp_variance_var = tk.StringVar(value='0.18')
         self.synth_shade_prob_var = tk.StringVar(value='0.45')
         self.synth_shade_strength_var = tk.StringVar(value='0.22')
+        self.synth_source_run_filter_var = tk.StringVar(value='')
         self.synth_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.synth_class_var, self.synth_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -711,18 +730,24 @@ class App(tk.Tk):
         ttk.Label(frm, text='Synth run name (optional)').grid(row=8, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_run_var).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Preview count').grid(row=9, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=9, column=1, sticky='w')
+        ttk.Label(frm, text='Source run filter (optional)').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_source_run_filter_var).grid(row=9, column=1, sticky='we')
+        ttk.Label(frm, text='Example: round2 or runA,runB').grid(row=9, column=2, sticky='w')
 
-        ttk.Label(frm, text='Global placement rect x1,y1,x2,y2 (optional)').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=10, column=1, sticky='w')
-        ttk.Button(frm, text='Edit per-bg polygon areas', command=self.pick_synth_placement_rect).grid(row=10, column=2, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=10, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_preview_count_var, width=10).grid(row=10, column=1, sticky='w')
 
-        ttk.Label(frm, text='Placement profile path is auto: <background folder>/placement_profile.json').grid(row=11, column=0, columnspan=2, sticky='w')
-        ttk.Button(frm, text='Edit profile', command=self.edit_synth_profile).grid(row=11, column=2, sticky='w')
+        ttk.Label(frm, text='Global placement rect x1,y1,x2,y2 (optional)').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_place_rect_var, width=24).grid(row=11, column=1, sticky='w')
+        ttk.Button(frm, text='Edit per-bg polygon areas', command=self.pick_synth_placement_rect).grid(row=11, column=2, sticky='w')
 
-        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=12, column=0, pady=8)
-        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=12, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Placement profile path is auto: <background folder>/placement_profile.json').grid(row=12, column=0, columnspan=2, sticky='w')
+        ttk.Button(frm, text='Edit profile', command=self.edit_synth_profile).grid(row=12, column=2, sticky='w')
+
+        ttk.Button(frm, text='Preview synth settings (left/right browse)', command=self.preview_synth).grid(row=13, column=0, pady=8)
+        ttk.Button(frm, text='Generate synthetic cut-paste set', command=self.generate_synth).grid(row=13, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=15, column=0, pady=8)
+        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=15, column=1, pady=8, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_synth_multi_tab(self):
@@ -742,6 +767,7 @@ class App(tk.Tk):
         self.synth_multi_temp_variance_var = tk.StringVar(value='0.18')
         self.synth_multi_shade_prob_var = tk.StringVar(value='0.45')
         self.synth_multi_shade_strength_var = tk.StringVar(value='0.22')
+        self.synth_multi_source_run_filter_var = tk.StringVar(value='')
         self.synth_multi_place_profile_var = tk.StringVar(value='')
         self.synth_multi_preview_mode_var = tk.StringVar(value='random')
         self.synth_multi_preview_count_var = tk.StringVar(value='12')
@@ -802,17 +828,21 @@ class App(tk.Tk):
         ttk.Label(frm, text='Run name (optional)').grid(row=15, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.synth_multi_run_var).grid(row=15, column=1, sticky='we')
 
-        ttk.Label(frm, text='Preview mode').grid(row=16, column=0, sticky='w')
-        ttk.Combobox(frm, textvariable=self.synth_multi_preview_mode_var, values=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'], state='readonly', width=18).grid(row=16, column=1, sticky='w')
+        ttk.Label(frm, text='Source run filter (optional)').grid(row=16, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_source_run_filter_var).grid(row=16, column=1, sticky='we')
+        ttk.Label(frm, text='Example: round2 or runA,runB').grid(row=16, column=2, sticky='w')
 
-        ttk.Label(frm, text='Preview count').grid(row=17, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=17, column=1, sticky='w')
+        ttk.Label(frm, text='Preview mode').grid(row=17, column=0, sticky='w')
+        ttk.Combobox(frm, textvariable=self.synth_multi_preview_mode_var, values=['random', 'min_scale', 'max_scale', 'bg_bri_min', 'bg_bri_max'], state='readonly', width=18).grid(row=17, column=1, sticky='w')
 
-        ttk.Button(frm, text='Preview multi-instance samples (new)', command=self.preview_synth_multi_profile).grid(row=18, column=0, pady=8, sticky='w')
-        ttk.Button(frm, text='Legacy preview', command=self.preview_synth_multi).grid(row=18, column=1, pady=8, sticky='w')
-        ttk.Button(frm, text='Preview temp min/max', command=self.preview_synth_multi_temp_extremes).grid(row=18, column=2, pady=8, sticky='w')
-        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=19, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Cluster mode: close/touching by default, max overlap enforced. Use partial shading to mimic one-sided shadowing on some objects.').grid(row=20, column=0, columnspan=3, sticky='w', pady=(2,0))
+        ttk.Label(frm, text='Preview count').grid(row=18, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_multi_preview_count_var, width=10).grid(row=18, column=1, sticky='w')
+
+        ttk.Button(frm, text='Preview multi-instance samples (new)', command=self.preview_synth_multi_profile).grid(row=19, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Legacy preview', command=self.preview_synth_multi).grid(row=19, column=1, pady=8, sticky='w')
+        ttk.Button(frm, text='Preview temp min/max', command=self.preview_synth_multi_temp_extremes).grid(row=19, column=2, pady=8, sticky='w')
+        ttk.Button(frm, text='Generate multi-instance synthetic set', command=self.generate_synth_multi).grid(row=20, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Cluster mode: close/touching by default, max overlap enforced. Use partial shading to mimic one-sided shadowing on some objects.').grid(row=21, column=0, columnspan=3, sticky='w', pady=(2,0))
         frm.columnconfigure(1, weight=1)
 
     def build_synth_all_tab(self):
@@ -847,6 +877,7 @@ class App(tk.Tk):
         self.synth_all_multi_min_scale_var = tk.StringVar(value='0.45')
         self.synth_all_multi_max_scale_var = tk.StringVar(value='1.10')
         self.synth_all_multi_spread_var = tk.StringVar(value='0.25')
+        self.synth_all_source_run_filter_var = tk.StringVar(value='')
 
         self.synth_all_obs_angle_min_var = tk.StringVar(value='0')
         self.synth_all_obs_angle_max_var = tk.StringVar(value='360')
@@ -881,74 +912,78 @@ class App(tk.Tk):
         ttk.Entry(frm, textvariable=self.synth_all_run_var).grid(row=4, column=1, sticky='we')
         ttk.Button(frm, text='Copy base -> Run filter', command=self.copy_combo_base_to_run_filter).grid(row=4, column=2)
 
-        ttk.Separator(frm, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='SYNTHETIC BG').grid(row=6, column=0, sticky='w')
-        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_bg_var).grid(row=6, column=1, sticky='w')
-        ttk.Label(frm, text='Count').grid(row=7, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=7, column=1, sticky='w')
-        ttk.Label(frm, text='Scale min/max').grid(row=8, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_min_scale_var, width=6).grid(row=8, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_max_scale_var, width=6).grid(row=8, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Rotation fixed: 360').grid(row=9, column=0, sticky='w')
-        ttk.Label(frm, text='BG brightness min/max').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_min_var, width=6).grid(row=10, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_max_var, width=6).grid(row=10, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Object brightness min/max').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_min_var, width=6).grid(row=11, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_max_var, width=6).grid(row=11, column=1, padx=(58,0), sticky='w')
-        ttk.Button(frm, text='Preview SYNTHETIC BG', command=self.preview_combo_bg).grid(row=11, column=2, sticky='w')
+        ttk.Label(frm, text='Source run filter for real cutouts').grid(row=5, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_source_run_filter_var).grid(row=5, column=1, sticky='we')
+        ttk.Label(frm, text='Example: round2 or runA,runB').grid(row=5, column=2, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=12, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='SYNTHETIC MULTI-INSTANCE').grid(row=13, column=0, sticky='w')
-        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_multi_var).grid(row=13, column=1, sticky='w')
-        ttk.Label(frm, text='Count').grid(row=14, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_multi_var, width=10).grid(row=14, column=1, sticky='w')
-        ttk.Label(frm, text='Min/Max objects').grid(row=15, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_min_obj_var, width=8).grid(row=15, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_max_obj_var, width=8).grid(row=15, column=2, sticky='w')
-        ttk.Label(frm, text='Overlap prob').grid(row=16, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_overlap_var, width=8).grid(row=16, column=1, sticky='w')
-        ttk.Label(frm, text='Max overlap ratio').grid(row=16, column=2, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_max_overlap_ratio_var, width=8).grid(row=16, column=2, padx=(120,0), sticky='w')
-        ttk.Label(frm, text='Scale min/max').grid(row=17, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=6).grid(row=17, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=6).grid(row=17, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Overlap spread (0 tight, 1 spread)').grid(row=18, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_spread_var, width=8).grid(row=18, column=1, sticky='w')
-        ttk.Label(frm, text='Cluster dist factor').grid(row=18, column=2, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_multi_cluster_dist_var, width=8).grid(row=18, column=2, padx=(120,0), sticky='w')
-        ttk.Label(frm, text='Rotation fixed: 360').grid(row=19, column=0, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=6, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='SYNTHETIC BG').grid(row=7, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_bg_var).grid(row=7, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_bg_var, width=10).grid(row=8, column=1, sticky='w')
+        ttk.Label(frm, text='Scale min/max').grid(row=9, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_min_scale_var, width=6).grid(row=9, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_max_scale_var, width=6).grid(row=9, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Rotation fixed: 360').grid(row=10, column=0, sticky='w')
+        ttk.Label(frm, text='BG brightness min/max').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_min_var, width=6).grid(row=11, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_bg_bri_max_var, width=6).grid(row=11, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Object brightness min/max').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_min_var, width=6).grid(row=12, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_bri_max_var, width=6).grid(row=12, column=1, padx=(58,0), sticky='w')
+        ttk.Button(frm, text='Preview SYNTHETIC BG', command=self.preview_combo_bg).grid(row=12, column=2, sticky='w')
 
-        ttk.Button(frm, text='Preview SYNTHETIC MULTI-INSTANCE', command=self.preview_combo_multi).grid(row=19, column=0, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=13, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='SYNTHETIC MULTI-INSTANCE').grid(row=14, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_multi_var).grid(row=14, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=15, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_multi_var, width=10).grid(row=15, column=1, sticky='w')
+        ttk.Label(frm, text='Min/Max objects').grid(row=16, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_min_obj_var, width=8).grid(row=16, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_obj_var, width=8).grid(row=16, column=2, sticky='w')
+        ttk.Label(frm, text='Overlap prob').grid(row=17, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_overlap_var, width=8).grid(row=17, column=1, sticky='w')
+        ttk.Label(frm, text='Max overlap ratio').grid(row=17, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_overlap_ratio_var, width=8).grid(row=17, column=2, padx=(120,0), sticky='w')
+        ttk.Label(frm, text='Scale min/max').grid(row=18, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_min_scale_var, width=6).grid(row=18, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_max_scale_var, width=6).grid(row=18, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Overlap spread (0 tight, 1 spread)').grid(row=19, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_spread_var, width=8).grid(row=19, column=1, sticky='w')
+        ttk.Label(frm, text='Cluster dist factor').grid(row=19, column=2, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_multi_cluster_dist_var, width=8).grid(row=19, column=2, padx=(120,0), sticky='w')
+        ttk.Label(frm, text='Rotation fixed: 360').grid(row=20, column=0, sticky='w')
 
-        ttk.Separator(frm, orient='horizontal').grid(row=20, column=0, columnspan=3, sticky='we', pady=6)
-        ttk.Label(frm, text='OBSTRUCTION').grid(row=21, column=0, sticky='w')
-        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_obs_var).grid(row=21, column=1, sticky='w')
-        ttk.Label(frm, text='Count').grid(row=22, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=22, column=1, sticky='w')
-        ttk.Label(frm, text='Entry angle min/max').grid(row=23, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_min_var, width=6).grid(row=23, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=6).grid(row=23, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Rotation deviation').grid(row=24, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=24, column=1, sticky='w')
-        ttk.Label(frm, text='Overlap min/max').grid(row=25, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_min_var, width=6).grid(row=25, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_max_var, width=6).grid(row=25, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Obstruction scale min/max').grid(row=26, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_min_var, width=6).grid(row=26, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_max_var, width=6).grid(row=26, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='Base object scale min/max').grid(row=27, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_min_var, width=6).grid(row=27, column=1, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_max_var, width=6).grid(row=27, column=1, padx=(58,0), sticky='w')
-        ttk.Label(frm, text='White-bg prob').grid(row=28, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=28, column=1, sticky='w')
-        ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=28, column=2, sticky='w')
+        ttk.Button(frm, text='Preview SYNTHETIC MULTI-INSTANCE', command=self.preview_combo_multi).grid(row=20, column=0, sticky='w')
 
-        ttk.Label(frm, text='Preview count (all previews)').grid(row=29, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.synth_all_preview_count_var, width=8).grid(row=29, column=1, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=21, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='OBSTRUCTION').grid(row=22, column=0, sticky='w')
+        ttk.Checkbutton(frm, text='Enable', variable=self.synth_all_use_obs_var).grid(row=22, column=1, sticky='w')
+        ttk.Label(frm, text='Count').grid(row=23, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_n_obs_var, width=10).grid(row=23, column=1, sticky='w')
+        ttk.Label(frm, text='Entry angle min/max').grid(row=24, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_min_var, width=6).grid(row=24, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_angle_max_var, width=6).grid(row=24, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Rotation deviation').grid(row=25, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_rot_dev_var, width=8).grid(row=25, column=1, sticky='w')
+        ttk.Label(frm, text='Overlap min/max').grid(row=26, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_min_var, width=6).grid(row=26, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_overlap_max_var, width=6).grid(row=26, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Obstruction scale min/max').grid(row=27, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_min_var, width=6).grid(row=27, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_scale_max_var, width=6).grid(row=27, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='Base object scale min/max').grid(row=28, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_min_var, width=6).grid(row=28, column=1, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obj_scale_max_var, width=6).grid(row=28, column=1, padx=(58,0), sticky='w')
+        ttk.Label(frm, text='White-bg prob').grid(row=29, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_obs_white_prob_var, width=8).grid(row=29, column=1, sticky='w')
+        ttk.Button(frm, text='Preview OBSTRUCTION', command=self.preview_combo_obs).grid(row=29, column=2, sticky='w')
 
-        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=30, column=0, pady=10)
-        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=31, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Preview count (all previews)').grid(row=30, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.synth_all_preview_count_var, width=8).grid(row=30, column=1, sticky='w')
+
+        ttk.Button(frm, text='Run COMBO RUN', command=self.run_all_synth).grid(row=31, column=0, pady=10)
+        ttk.Label(frm, text='After generation: Data Prep -> Run filter = base name (e.g. combo01), then Build split.').grid(row=32, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_obstruction_tab(self):
@@ -968,6 +1003,7 @@ class App(tk.Tk):
         self.obs_white_prob_var = tk.StringVar(value='0.10')
         self.obs_preview_count_var = tk.StringVar(value='12')
         self.obs_run_var = tk.StringVar(value='')
+        self.obs_source_run_filter_var = tk.StringVar(value='')
         self.obs_class_var.trace_add('write', lambda *_: self.auto_assign_class_id(self.obs_class_var, self.obs_class_id_var))
 
         ttk.Label(frm, text='Class name').grid(row=0, column=0, sticky='w')
@@ -1014,12 +1050,13 @@ class App(tk.Tk):
         ttk.Label(frm, text='Obstruction run name (optional)').grid(row=12, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.obs_run_var).grid(row=12, column=1, sticky='we')
 
-        ttk.Label(frm, text='Preview count').grid(row=13, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.obs_preview_count_var, width=10).grid(row=13, column=1, sticky='w')
+        ttk.Label(frm, text='Source run filter (optional)').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_source_run_filter_var).grid(row=13, column=1, sticky='we')
+        ttk.Label(frm, text='Example: round2 or runA,runB').grid(row=13, column=2, sticky='w')
 
-        ttk.Button(frm, text='Preview obstruction samples (left/right browse)', command=self.preview_obstruction).grid(row=14, column=0, pady=8)
-        ttk.Button(frm, text='Generate obstruction synthetic set', command=self.generate_obstruction).grid(row=14, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=15, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Preview count').grid(row=14, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.obs_preview_count_var, width=10).grid(row=14, column=1, sticky='w')
+        ttk.Label(frm, text='Preview shows debug: yellow=center, magenta=hand vector (bottom→top), cyan=top→center target.').grid(row=16, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_cutout_tab(self):
@@ -1144,22 +1181,26 @@ class App(tk.Tk):
         ttk.Label(frm, text='Workers (Windows: use 0)').grid(row=7, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.workers_var).grid(row=7, column=1, sticky='we')
 
-        ttk.Button(frm, text='Start training', command=self.train).grid(row=8, column=0, pady=8)
-        ttk.Separator(frm, orient='horizontal').grid(row=9, column=0, columnspan=3, sticky='we', pady=6)
+        ttk.Label(frm, text='Split run filter (optional)').grid(row=8, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.split_run_var, width=40).grid(row=8, column=1, sticky='we')
 
-        ttk.Label(frm, text='Remote SSH target').grid(row=10, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.remote_train_target_var).grid(row=10, column=1, sticky='we')
-        ttk.Label(frm, text='Example: user@training-pc').grid(row=10, column=2, sticky='w')
+        ttk.Button(frm, text='Start training', command=self.train).grid(row=9, column=0, pady=8)
+        ttk.Button(frm, text='Build train/val/test split', command=self.build_split).grid(row=9, column=1, pady=8, sticky='w')
+        ttk.Separator(frm, orient='horizontal').grid(row=10, column=0, columnspan=3, sticky='we', pady=6)
 
-        ttk.Label(frm, text='Remote repo folder').grid(row=11, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.remote_train_repo_var).grid(row=11, column=1, sticky='we')
+        ttk.Label(frm, text='Remote SSH target').grid(row=11, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_target_var).grid(row=11, column=1, sticky='we')
+        ttk.Label(frm, text='Example: user@training-pc').grid(row=11, column=2, sticky='w')
 
-        ttk.Label(frm, text='Remote python').grid(row=12, column=0, sticky='w')
-        ttk.Entry(frm, textvariable=self.remote_train_python_var).grid(row=12, column=1, sticky='we')
+        ttk.Label(frm, text='Remote repo folder').grid(row=12, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_repo_var).grid(row=12, column=1, sticky='we')
 
-        ttk.Button(frm, text='Show remote SSH command', command=self.show_remote_train_command).grid(row=13, column=0, pady=8, sticky='w')
-        ttk.Button(frm, text='Start training on remote PC', command=self.start_remote_train).grid(row=13, column=1, pady=8, sticky='w')
-        ttk.Label(frm, text='Requires SSH access and a synced repo/data on the other PC. Training logs go to runs/segment on that PC.').grid(row=14, column=0, columnspan=3, sticky='w')
+        ttk.Label(frm, text='Remote python').grid(row=13, column=0, sticky='w')
+        ttk.Entry(frm, textvariable=self.remote_train_python_var).grid(row=13, column=1, sticky='we')
+
+        ttk.Button(frm, text='Show remote SSH command', command=self.show_remote_train_command).grid(row=14, column=0, pady=8, sticky='w')
+        ttk.Button(frm, text='Start training on remote PC', command=self.start_remote_train).grid(row=14, column=1, pady=8, sticky='w')
+        ttk.Label(frm, text='Requires SSH access and a synced repo/data on the other PC. Training logs go to runs/segment on that PC.').grid(row=15, column=0, columnspan=3, sticky='w')
         frm.columnconfigure(1, weight=1)
 
     def build_ddp_tab(self):
@@ -1245,6 +1286,7 @@ class App(tk.Tk):
         self.human_conf_var = tk.StringVar(value='0.20')
         self.human_alpha_var = tk.StringVar(value='0.30')
         self.mask_smooth_var = tk.StringVar(value='2')
+        self.infer_pick_overlay_var = tk.BooleanVar(value=False)
         self.grip_pose_var = tk.BooleanVar(value=False)
         self.grip_model_var = tk.StringVar(value=str(ROOT / 'runs' / 'pose' / 'headcam_pose_headcam2' / 'weights' / 'best.pt'))
         self.grip_conf_var = tk.StringVar(value='0.20')
@@ -1299,6 +1341,7 @@ class App(tk.Tk):
 
         ttk.Label(frm, text='Mask smooth (0 off)').grid(row=13, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.mask_smooth_var, width=8).grid(row=13, column=1, sticky='w')
+        ttk.Checkbutton(frm, text='Show pickable/free object', variable=self.infer_pick_overlay_var).grid(row=13, column=2, sticky='w')
 
         ttk.Checkbutton(frm, text='Enable grip keypoint overlay', variable=self.grip_pose_var).grid(row=14, column=0, sticky='w')
         ttk.Entry(frm, textvariable=self.grip_model_var, width=55).grid(row=14, column=1, sticky='we')
@@ -1803,6 +1846,7 @@ class App(tk.Tk):
             '--poly-eps', self.auto_poly_eps_var.get(),
             '--alpha-threshold', self.auto_alpha_thr_var.get(),
             '--bg-color-threshold', self.auto_bg_color_thr_var.get(),
+            '--magenta-key-threshold', self.auto_magenta_key_thr_var.get(),
             '--mask-upscale', self.auto_mask_upscale_var.get(),
         ]
         if src and Path(src).is_dir():
@@ -1811,12 +1855,18 @@ class App(tk.Tk):
             cmd.extend(['--video', src])
         if self.auto_keep_largest_var.get():
             cmd.append('--keep-largest-component')
+        if self.auto_magenta_bg_boost_var.get():
+            cmd.append('--magenta-bg-boost')
         if self.auto_run_var.get().strip():
             cmd.extend(['--run-name', self.auto_run_var.get().strip()])
         return cmd
 
     def preview_autolabel(self):
         cmd = self._autolabel_cmd_base() + ['--preview-only', '--preview-count', self.auto_preview_count_var.get()]
+        if self.auto_preview_hide_bg_var.get():
+            cmd.append('--preview-hide-bg')
+        if self.auto_preview_overlay_mask_var.get():
+            cmd.append('--preview-overlay-mask')
         self.run_cmd(cmd)
 
     def autolabel(self):
@@ -1876,6 +1926,8 @@ class App(tk.Tk):
         profile_path = str(Path(bg_dir) / 'placement_profile.json') if bg_dir else ''
         if profile_path:
             cmd.extend(['--placement-profile', profile_path])
+        if self.synth_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_source_run_filter_var.get().strip()])
         if self.synth_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_run_var.get().strip()])
         return cmd
@@ -1964,6 +2016,8 @@ class App(tk.Tk):
         profile_path = str(Path(bg_dir) / 'placement_profile.json') if bg_dir else ''
         if profile_path:
             cmd.extend(['--placement-profile', profile_path])
+        if self.synth_multi_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_multi_source_run_filter_var.get().strip()])
         if self.synth_multi_run_var.get().strip():
             cmd.extend(['--run-name', self.synth_multi_run_var.get().strip()])
         return cmd
@@ -2090,6 +2144,8 @@ class App(tk.Tk):
             '--warm-bias', str(warm),
             '--sample-count', str(sample_count),
         ]
+        if self.synth_multi_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_multi_source_run_filter_var.get().strip()])
         self.run_cmd(cmd)
 
     def generate_synth_multi(self):
@@ -2143,6 +2199,8 @@ class App(tk.Tk):
             '--run-name', f'{base}_bg_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
         ]
+        if self.synth_all_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
         self.run_cmd(cmd)
 
     def preview_combo_multi(self):
@@ -2179,6 +2237,8 @@ class App(tk.Tk):
             '--run-name', f'{base}_multi_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
         ]
+        if self.synth_all_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
         self.run_cmd(cmd)
 
     def preview_combo_obs(self):
@@ -2208,6 +2268,8 @@ class App(tk.Tk):
             '--run-name', f'{base}_obs_preview',
             '--preview-only', '--preview-window', '--preview-count', self.synth_all_preview_count_var.get(),
         ]
+        if self.synth_all_source_run_filter_var.get().strip():
+            cmd.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
         self.run_cmd(cmd)
 
     def copy_combo_base_to_run_filter(self):
@@ -2255,6 +2317,8 @@ class App(tk.Tk):
                 '--placement-profile', profile_path,
                 '--run-name', f'{base}_bg',
             ]
+            if self.synth_all_source_run_filter_var.get().strip():
+                cmd_bg.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
             self.run_cmd(cmd_bg)
 
         if self.synth_all_use_multi_var.get() and n_multi > 0:
@@ -2279,6 +2343,8 @@ class App(tk.Tk):
                 '--placement-profile', profile_path,
                 '--run-name', f'{base}_multi',
             ]
+            if self.synth_all_source_run_filter_var.get().strip():
+                cmd_multi.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
             self.run_cmd(cmd_multi)
 
         if self.synth_all_use_obs_var.get() and n_obs > 0:
@@ -2303,6 +2369,8 @@ class App(tk.Tk):
                     '--white-bg-prob', self.synth_all_obs_white_prob_var.get(),
                     '--run-name', f'{base}_obs',
                 ]
+                if self.synth_all_source_run_filter_var.get().strip():
+                    cmd_obs.extend(['--source-run-filter', self.synth_all_source_run_filter_var.get().strip()])
                 self.run_cmd(cmd_obs)
 
         self.split_run_var.set(base)
@@ -2357,7 +2425,7 @@ class App(tk.Tk):
             '--rotation-deviation', self.obs_rot_dev_var.get(),
             '--overlap-level', self.obs_overlap_var.get(),
             '--obstruction-scale', self.obs_scale_var.get(),
-        ] + (['--run-name', self.obs_run_var.get().strip()] if self.obs_run_var.get().strip() else [])
+        ] + (['--source-run-filter', self.obs_source_run_filter_var.get().strip()] if self.obs_source_run_filter_var.get().strip() else []) + (['--run-name', self.obs_run_var.get().strip()] if self.obs_run_var.get().strip() else [])
 
     def preview_obstruction(self):
         if not self.ensure_class_registered(self.obs_class_var.get(), self.obs_class_id_var.get()):
@@ -2542,6 +2610,8 @@ class App(tk.Tk):
                 '--device', self.infer_device_var.get(),
                 '--mask-smooth', self.mask_smooth_var.get(),
             ]
+            if self.infer_pick_overlay_var.get():
+                cmd.append('--pick-overlay')
             if self.grip_pose_var.get() and self.grip_model_var.get().strip():
                 cmd.extend(['--grip-pose', '--grip-model', self.grip_model_var.get().strip(), '--grip-conf', self.grip_conf_var.get()])
             self.run_cmd(cmd)
@@ -2564,6 +2634,8 @@ class App(tk.Tk):
             '--human-alpha', self.human_alpha_var.get(),
             '--mask-smooth', self.mask_smooth_var.get(),
         ]
+        if self.infer_pick_overlay_var.get():
+            cmd.append('--pick-overlay')
         if self.grip_pose_var.get() and self.grip_model_var.get().strip():
             cmd.extend(['--grip-pose', '--grip-model', self.grip_model_var.get().strip(), '--grip-conf', self.grip_conf_var.get()])
         if self.count_log_var.get():

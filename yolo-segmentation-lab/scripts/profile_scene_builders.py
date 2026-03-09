@@ -126,6 +126,36 @@ def bbox_fully_inside_poly(px, py, ow, oh, poly_pts):
     return all(point_in_poly(cx, cy, poly_pts) for cx, cy in corners)
 
 
+def build_poly_context(w, h, poly_px):
+    if poly_px is None or len(poly_px) < 3:
+        return None
+    poly_mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.fillPoly(poly_mask, [np.array(poly_px, dtype=np.int32).reshape(-1, 1, 2)], 1)
+    xs = [p[0] for p in poly_px]
+    ys = [p[1] for p in poly_px]
+    return {
+        'poly_px': poly_px,
+        'integral': cv2.integral(poly_mask.astype(np.uint8), sdepth=cv2.CV_32S),
+        'min_px': max(0, min(xs)),
+        'max_px': min(w - 1, max(xs)),
+        'min_py': max(0, min(ys)),
+        'max_py': min(h - 1, max(ys)),
+    }
+
+
+def rect_inside_poly_ratio(px, py, ow, oh, poly_ctx):
+    if poly_ctx is None:
+        return 1.0
+    x1 = max(0, int(px))
+    y1 = max(0, int(py))
+    x2 = min(poly_ctx['integral'].shape[1] - 1, int(px + ow))
+    y2 = min(poly_ctx['integral'].shape[0] - 1, int(py + oh))
+    area = max(1, (x2 - x1) * (y2 - y1))
+    ii = poly_ctx['integral']
+    inside = int(ii[y2, x2] - ii[y1, x2] - ii[y2, x1] + ii[y1, x1])
+    return float(inside) / float(area)
+
+
 def load_realism_preferences(data_root: Path, class_name: str):
     pref_path = data_root / 'preferences' / f'{class_name}_realism.json'
     if not pref_path.exists():
@@ -152,7 +182,103 @@ def weighted_choice(items):
     return random.choices(items, weights=weights, k=1)[0]
 
 
-def collect_cutouts(data_root: Path, class_name: str):
+def _normalize_source_run_filters(source_run_filter):
+    if not source_run_filter:
+        return []
+    if isinstance(source_run_filter, (list, tuple, set)):
+        raw = source_run_filter
+    else:
+        raw = str(source_run_filter).replace(';', ',').split(',')
+    return [str(x).strip().lower() for x in raw if str(x).strip()]
+
+
+def source_rel_matches_run_filter(rel_path, source_run_filter):
+    filters = _normalize_source_run_filters(source_run_filter)
+    if not filters:
+        return True
+    parts = rel_path.parts if isinstance(rel_path, Path) else Path(rel_path).parts
+    run_names = []
+    for idx, part in enumerate(parts[:-1]):
+        if str(part).lower() == 'runs':
+            run_names.append(str(parts[idx + 1]).lower())
+    if not run_names:
+        return False
+    return any(token in run_name for token in filters for run_name in run_names)
+
+
+def resolve_saved_mask_path(data_root: Path, class_name: str, rel_path):
+    rel = rel_path if isinstance(rel_path, Path) else Path(rel_path)
+    parts = list(rel.parts)
+    if len(parts) < 1:
+        return None
+    stem = rel.stem
+    if 'components' in parts and 'runs' in parts:
+        try:
+            cidx = parts.index('components')
+            ridx = parts.index('runs')
+            comp = parts[cidx + 1]
+            run_name = parts[ridx + 1]
+            return data_root / 'staging' / class_name / 'autolabel' / comp / run_name / 'masks' / f'{stem}_mask.png'
+        except Exception:
+            return None
+    return None
+
+
+def load_saved_or_polygon_mask(data_root: Path, class_name: str, image_path: Path, label_path: Path, width: int, height: int):
+    try:
+        rel = image_path.relative_to(data_root / 'images' / class_name)
+    except Exception:
+        rel = None
+    if rel is not None:
+        saved_mask_path = resolve_saved_mask_path(data_root, class_name, rel)
+        if saved_mask_path is not None and saved_mask_path.exists():
+            saved_mask = cv2.imread(str(saved_mask_path), cv2.IMREAD_GRAYSCALE)
+            if saved_mask is not None and saved_mask.shape[:2] == (height, width):
+                _, saved_mask = cv2.threshold(saved_mask, 127, 255, cv2.THRESH_BINARY)
+                return saved_mask
+    poly = parse_first_polygon(label_path, width, height)
+    if poly is None:
+        return None
+    return polygon_to_mask(poly, width, height)
+
+
+def despill_magenta_pixels(image: np.ndarray, mask: np.ndarray, strength: float = 0.7):
+    if image is None or mask is None or image.size == 0 or mask.size == 0:
+        return image
+    strength = float(np.clip(strength, 0.0, 1.0))
+    if strength <= 0:
+        return image
+
+    out = image.copy()
+    hsv = cv2.cvtColor(out, cv2.COLOR_BGR2HSV)
+    b = out[:, :, 0].astype(np.int16)
+    g = out[:, :, 1].astype(np.int16)
+    r = out[:, :, 2].astype(np.int16)
+    obj = mask > 0
+
+    mag_hsv = (
+        (hsv[:, :, 0] >= 135) &
+        (hsv[:, :, 0] <= 175) &
+        (hsv[:, :, 1] >= 35)
+    )
+    mag_rgb = (
+        (r >= g + 10) &
+        (b >= g + 10) &
+        ((r + b) - 2 * g >= 18)
+    )
+    spill = obj & (mag_hsv | mag_rgb)
+    if not np.any(spill):
+        return out
+
+    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    out_f = out.astype(np.float32)
+    neutral = np.repeat(gray[:, :, None], 3, axis=2)
+    mix = out_f * (1.0 - strength) + neutral * strength
+    out[spill] = np.clip(mix[spill], 0, 255).astype(np.uint8)
+    return out
+
+
+def collect_cutouts(data_root: Path, class_name: str, source_run_filter=''):
     image_root = data_root / 'images' / class_name
     label_root = data_root / 'labels' / class_name
     if not image_root.exists() or not label_root.exists():
@@ -166,6 +292,8 @@ def collect_cutouts(data_root: Path, class_name: str):
         rel = image_path.relative_to(image_root)
         if any(tag in rel.parts for tag in ['synth_runs', 'obs_runs', 'synth_multi_runs']):
             continue
+        if not source_rel_matches_run_filter(rel, source_run_filter):
+            continue
         label_path = (label_root / rel).with_suffix('.txt')
         if not label_path.exists():
             continue
@@ -173,15 +301,18 @@ def collect_cutouts(data_root: Path, class_name: str):
         if image is None:
             continue
         h, w = image.shape[:2]
-        poly = parse_first_polygon(label_path, w, h)
-        if poly is None:
+        mask = load_saved_or_polygon_mask(data_root, class_name, image_path, label_path, w, h)
+        if mask is None:
             continue
-        mask = polygon_to_mask(poly, w, h)
-        x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
+        ys, xs = np.where(mask > 0)
+        if len(xs) < 20:
+            continue
+        x, y, bw, bh = cv2.boundingRect(np.column_stack((xs, ys)).astype(np.int32))
         crop = image[y:y + bh, x:x + bw].copy()
         crop_mask = mask[y:y + bh, x:x + bw].copy()
         if crop.size == 0 or int((crop_mask > 0).sum()) < 20:
             continue
+        crop = despill_magenta_pixels(crop, crop_mask, strength=0.72)
         rel_key = str(rel).replace('\\', '/')
         cutouts.append({
             'image': crop,
@@ -194,6 +325,8 @@ def collect_cutouts(data_root: Path, class_name: str):
         })
 
     if not cutouts:
+        if source_run_filter:
+            raise RuntimeError(f'No valid cutouts found for class={class_name} with source_run_filter={source_run_filter!r}')
         raise RuntimeError(f'No valid cutouts found for class={class_name}')
     return cutouts
 
@@ -225,12 +358,27 @@ def prepare_cutout_variant(cutout, normalized_scale, angle):
     x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
     obj_img = obj_img[y1:y2 + 1, x1:x2 + 1]
     obj_mask = obj_mask[y1:y2 + 1, x1:x2 + 1]
+    points = cv2.findNonZero((obj_mask > 0).astype(np.uint8))
+    axis = np.array([1.0, 0.0], dtype=np.float32)
+    elongation = 1.0
+    if points is not None and len(points) >= 5:
+        (_, _), (rw, rh), rect_angle = cv2.minAreaRect(points)
+        long_side = max(float(rw), float(rh))
+        short_side = max(1.0, min(float(rw), float(rh)))
+        elongation = long_side / short_side
+        theta = np.deg2rad(rect_angle + (90.0 if rh > rw else 0.0))
+        axis = np.array([np.cos(theta), np.sin(theta)], dtype=np.float32)
+        norm = float(np.linalg.norm(axis))
+        if norm > 1e-6:
+            axis /= norm
     variant = {
         'image': obj_img,
         'mask': obj_mask,
         'mask_bin': (obj_mask > 0),
         'area': int((obj_mask > 0).sum()),
         'shape': obj_mask.shape[:2],
+        'long_axis': axis,
+        'elongation': float(elongation),
     }
     _cache_put(key, variant)
     return variant
@@ -299,35 +447,39 @@ def choose_background_beta(preview_mode: str, effective):
     return random.uniform(effective['bg_brightness_min'], effective['bg_brightness_max'])
 
 
-def sample_position_in_polygon(w, h, ow, oh, poly_px, tries=80):
-    if poly_px is None or len(poly_px) < 3:
+def sample_position_in_polygon(w, h, ow, oh, poly_ctx, tries=80, min_inside_ratio=1.0):
+    if poly_ctx is None:
         return random.randint(0, max(0, w - ow)), random.randint(0, max(0, h - oh))
 
-    xs = [p[0] for p in poly_px]
-    ys = [p[1] for p in poly_px]
-    min_px = max(0, min(xs))
-    min_py = max(0, min(ys))
-    max_px = min(w - ow, max(xs))
-    max_py = min(h - oh, max(ys))
+    min_px = max(0, poly_ctx['min_px'])
+    min_py = max(0, poly_ctx['min_py'])
+    max_px = min(w - ow, poly_ctx['max_px'])
+    max_py = min(h - oh, poly_ctx['max_py'])
     if max_px < min_px or max_py < min_py:
         return None
 
+    best = None
+    best_ratio = -1.0
     for _ in range(max(1, tries)):
         px = random.randint(min_px, max_px)
         py = random.randint(min_py, max_py)
-        if bbox_fully_inside_poly(px, py, ow, oh, poly_px):
+        ratio = rect_inside_poly_ratio(px, py, ow, oh, poly_ctx)
+        if ratio >= min_inside_ratio:
             return px, py
-    return None
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best = (px, py)
+    return best if best_ratio >= max(0.70, min_inside_ratio - 0.10) else None
 
 
-def sample_scattered_position(w, h, ow, oh, poly_px, centers, tries=80):
+def sample_scattered_position(w, h, ow, oh, poly_ctx, centers, tries=80, min_inside_ratio=1.0):
     if not centers:
-        return sample_position_in_polygon(w, h, ow, oh, poly_px, tries=tries)
+        return sample_position_in_polygon(w, h, ow, oh, poly_ctx, tries=tries, min_inside_ratio=min_inside_ratio)
 
     best = None
     best_score = -1.0
     for _ in range(max(1, tries)):
-        pos = sample_position_in_polygon(w, h, ow, oh, poly_px, tries=4)
+        pos = sample_position_in_polygon(w, h, ow, oh, poly_ctx, tries=4, min_inside_ratio=min_inside_ratio)
         if pos is None:
             continue
         px, py = pos
@@ -430,27 +582,33 @@ def _apply_partial_object_shading(obj_img, obj_mask, shade_prob, shade_strength)
     xx = xx / max(1.0, float(w - 1))
     yy = yy / max(1.0, float(h - 1))
 
-    angle = random.uniform(-0.55 * np.pi, 0.55 * np.pi)
-    direction = np.cos(angle) * xx + np.sin(angle) * yy
-    direction = (direction - direction.min()) / max(1e-6, float(direction.max() - direction.min()))
+    alpha = np.clip(obj_mask.astype(np.float32) / 255.0, 0.0, 1.0)
+    angle = random.uniform(0.0, 2.0 * np.pi)
+    dir_field = np.cos(angle) * (xx - 0.5) + np.sin(angle) * (yy - 0.5)
+    dir_field = dir_field / max(1e-6, float(np.max(np.abs(dir_field))))
+
+    # Shade a substantial one-sided portion of the object, not just a weak full-object gradient.
+    cutoff = random.uniform(-0.10, 0.18)
+    softness = random.uniform(0.05, 0.14)
+    shaded_side = 1.0 / (1.0 + np.exp(-(dir_field - cutoff) / softness))
 
     if random.random() < 0.35:
-        cx = random.uniform(0.25, 0.75)
-        cy = random.uniform(0.25, 0.75)
+        cx = random.uniform(0.28, 0.72)
+        cy = random.uniform(0.28, 0.72)
         radial = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
         radial = radial / max(1e-6, float(radial.max()))
-        direction = 0.7 * direction + 0.3 * radial
+        shaded_side = np.clip(0.82 * shaded_side + 0.18 * radial, 0.0, 1.0)
 
-    soft = cv2.GaussianBlur(direction.astype(np.float32), (0, 0), sigmaX=max(2.0, 0.18 * w), sigmaY=max(2.0, 0.18 * h))
-    soft = (soft - soft.min()) / max(1e-6, float(soft.max() - soft.min()))
-    strength = random.uniform(0.45, 1.0) * float(shade_strength)
-    shadow = 1.0 - strength * soft
-
-    alpha = np.clip(obj_mask.astype(np.float32) / 255.0, 0.0, 1.0)
+    shaded_side = cv2.GaussianBlur(shaded_side.astype(np.float32), (0, 0), sigmaX=max(1.2, 0.06 * w), sigmaY=max(1.2, 0.06 * h))
+    shaded_side = np.clip(shaded_side, 0.0, 1.0)
+    strength = np.clip(random.uniform(0.70, 1.0) * float(shade_strength), 0.0, 0.95)
+    shadow = 1.0 - strength * shaded_side
     shadow = 1.0 - (1.0 - shadow) * alpha
 
     lab = cv2.cvtColor(obj_img, cv2.COLOR_BGR2LAB).astype(np.float32)
     lab[:, :, 0] *= shadow
+    lab[:, :, 1] *= 1.0 - 0.08 * shaded_side * alpha
+    lab[:, :, 2] *= 1.0 - 0.04 * shaded_side * alpha
     return cv2.cvtColor(_clip_uint8(lab), cv2.COLOR_LAB2BGR)
 
 
@@ -632,17 +790,29 @@ def add_contact_shadow(canvas, alpha_mask, px, py):
     oh, ow = alpha_mask.shape[:2]
     shadow = np.zeros(canvas.shape[:2], dtype=np.float32)
     contact = np.clip(alpha_mask.astype(np.float32), 0.0, 1.0)
-    contact *= np.linspace(0.35, 1.0, oh, dtype=np.float32)[:, None]
-    contact = cv2.GaussianBlur(contact, (11, 11), 0)
-    x1 = max(0, px)
-    y1 = max(0, py)
-    x2 = min(canvas.shape[1], px + ow)
-    y2 = min(canvas.shape[0], py + oh)
+    # Concentrate the shadow under the object and slightly widen it sideways.
+    contact *= np.linspace(0.0, 1.0, oh, dtype=np.float32)[:, None] ** 3.2
+    contact = cv2.resize(contact, (max(1, int(round(ow * 1.04))), max(1, int(round(oh * 0.20)))), interpolation=cv2.INTER_LINEAR)
+    contact = cv2.GaussianBlur(contact, (0, 0), sigmaX=max(2.0, 0.07 * ow), sigmaY=max(1.2, 0.035 * oh))
+    contact = np.clip(contact, 0.0, 1.0)
+
+    sw = contact.shape[1]
+    sh = contact.shape[0]
+    sx = px - (sw - ow) // 2 + int(round(random.uniform(-0.02, 0.02) * ow))
+    sy = py + int(0.80 * oh) + int(round(random.uniform(-0.015, 0.015) * oh))
+    x1 = max(0, sx)
+    y1 = max(0, sy)
+    x2 = min(canvas.shape[1], sx + sw)
+    y2 = min(canvas.shape[0], sy + sh)
     if x2 <= x1 or y2 <= y1:
         return canvas
-    shadow[y1:y2, x1:x2] = np.maximum(shadow[y1:y2, x1:x2], contact[: y2 - y1, : x2 - x1])
+    cx1 = max(0, -sx)
+    cy1 = max(0, -sy)
+    cx2 = cx1 + (x2 - x1)
+    cy2 = cy1 + (y2 - y1)
+    shadow[y1:y2, x1:x2] = np.maximum(shadow[y1:y2, x1:x2], contact[cy1:cy2, cx1:cx2])
     out = canvas.astype(np.float32)
-    out *= (1.0 - shadow[:, :, None] * random.uniform(0.12, 0.24))
+    out *= (1.0 - shadow[:, :, None] * random.uniform(0.58, 0.82))
     return _clip_uint8(out)
 
 
@@ -663,15 +833,14 @@ def composite_object(canvas, obj_img, obj_mask, px, py, scene_depth=0.5):
     return canvas
 
 
-def _sample_heap_anchor(w, h, poly_px):
+def _sample_heap_anchor(w, h, poly_ctx):
+    poly_px = None if poly_ctx is None else poly_ctx['poly_px']
     if poly_px is None:
         return int(w * random.uniform(0.35, 0.65)), int(h * random.uniform(0.55, 0.82))
-    xs = [p[0] for p in poly_px]
-    ys = [p[1] for p in poly_px]
-    min_px = max(0, min(xs))
-    max_px = min(w - 1, max(xs))
-    min_py = max(0, min(ys))
-    max_py = min(h - 1, max(ys))
+    min_px = max(0, poly_ctx['min_px'])
+    max_px = min(w - 1, poly_ctx['max_px'])
+    min_py = max(0, poly_ctx['min_py'])
+    max_py = min(h - 1, poly_ctx['max_py'])
     best = None
     best_score = -1.0
     for _ in range(80):
@@ -685,9 +854,9 @@ def _sample_heap_anchor(w, h, poly_px):
     return best
 
 
-def _sample_heap_position(w, h, ow, oh, poly_px, centers, heap_anchor, support_masks, cluster_distance_factor, overlap_spread):
+def _sample_heap_position(w, h, ow, oh, poly_ctx, centers, heap_anchor, support_masks, cluster_distance_factor, overlap_spread, min_inside_ratio=1.0):
     if not centers:
-        return sample_position_in_polygon(w, h, ow, oh, poly_px, tries=80)
+        return sample_position_in_polygon(w, h, ow, oh, poly_ctx, tries=28, min_inside_ratio=min_inside_ratio)
     anchor_x, anchor_y = heap_anchor if heap_anchor is not None else centers[random.randrange(len(centers))]
     best = None
     best_score = -1e9
@@ -701,7 +870,7 @@ def _sample_heap_position(w, h, ow, oh, poly_px, centers, heap_anchor, support_m
         jitter_y = int(random.uniform(-0.35, 1.0) * overlap_spread * reach)
         px = int(np.clip(base_x - ow // 2 + jitter_x, 0, w - ow))
         py = int(np.clip(base_y - oh // 2 + jitter_y, 0, h - oh))
-        if poly_px is not None and not bbox_fully_inside_poly(px, py, ow, oh, poly_px):
+        if rect_inside_poly_ratio(px, py, ow, oh, poly_ctx) < min_inside_ratio:
             continue
         cx_new = px + ow // 2
         cy_new = py + oh // 2
@@ -721,6 +890,32 @@ def _sample_heap_position(w, h, ow, oh, poly_px, centers, heap_anchor, support_m
             best_score = score
             best = (px, py)
     return best
+
+
+def _sample_side_by_side_position(w, h, ow, oh, poly_ctx, ref_instance, min_inside_ratio=1.0):
+    axis = np.array(ref_instance.get('long_axis', [1.0, 0.0]), dtype=np.float32)
+    norm = float(np.linalg.norm(axis))
+    if norm <= 1e-6:
+        return None
+    axis /= norm
+    perp = np.array([-axis[1], axis[0]], dtype=np.float32)
+    ref_cx, ref_cy = ref_instance['center']
+    ref_ow = max(1, int(ref_instance.get('ow', ow)))
+    ref_oh = max(1, int(ref_instance.get('oh', oh)))
+    sep = 0.5 * (max(ref_ow, ow) + max(ref_oh, oh))
+    for _ in range(16):
+        sign = -1.0 if random.random() < 0.5 else 1.0
+        along = random.uniform(-0.18, 0.18) * max(ref_ow, ref_oh)
+        sideways = sign * random.uniform(0.42, 0.62) * sep
+        cx = ref_cx + axis[0] * along + perp[0] * sideways
+        cy = ref_cy + axis[1] * along + perp[1] * sideways
+        px = int(round(cx - ow / 2.0))
+        py = int(round(cy - oh / 2.0))
+        px = int(np.clip(px, 0, w - ow))
+        py = int(np.clip(py, 0, h - oh))
+        if rect_inside_poly_ratio(px, py, ow, oh, poly_ctx) >= min_inside_ratio:
+            return px, py
+    return None
 
 
 def _scene_header_overlay(canvas, visible_masks, target_objects, preview_mode, effective, bg_name, source_name):
@@ -748,6 +943,10 @@ def _scene_header_overlay(canvas, visible_masks, target_objects, preview_mode, e
 
 
 def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side):
+    min_inside_ratio = 0.85
+    cutouts_by_source = {}
+    for cutout in cutouts:
+        cutouts_by_source.setdefault(cutout.get('source'), []).append(cutout)
     for _ in range(200):
         bg, bg_path = pick_random_background(bg_files)
         if bg is None:
@@ -759,8 +958,10 @@ def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side
         h, w = bg.shape[:2]
         effective = choose_effective_settings(entry, args.class_name)
         poly_px = None
+        poly_ctx = None
         if effective['poly'] is not None:
             poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in effective['poly']]
+            poly_ctx = build_poly_context(w, h, poly_px)
 
         bg_beta = choose_background_beta(getattr(args, 'preview_mode', 'random'), effective)
         canvas = cv2.convertScaleAbs(bg.copy(), alpha=1.0, beta=bg_beta)
@@ -771,14 +972,21 @@ def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side
         visible_areas = []
         centers = []
         placed_instances = []
-        heap_anchor = _sample_heap_anchor(w, h, poly_px)
-        attempts_budget = max(120, target_objects * 120)
+        heap_anchor = _sample_heap_anchor(w, h, poly_ctx)
+        attempts_budget = max(90, target_objects * 70)
 
         for _ in range(attempts_budget):
             if len(placed_instances) >= target_objects:
                 break
 
-            cutout = weighted_choice(cutouts)
+            use_pairing = bool(placed_instances) and random.random() < 0.28
+            if use_pairing:
+                ref_instance = random.choice(placed_instances)
+                source_pool = cutouts_by_source.get(ref_instance.get('source')) or cutouts
+                cutout = weighted_choice(source_pool)
+            else:
+                ref_instance = None
+                cutout = weighted_choice(cutouts)
             requested_scale = choose_requested_scale(getattr(args, 'preview_mode', 'random'), effective)
             normalized_scale = requested_scale * (reference_long_side / max(1.0, cutout['long_side']))
             angle = random.uniform(-args.max_rotation, args.max_rotation)
@@ -795,28 +1003,39 @@ def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side
 
             placed = False
             new_mask = None
-            for _ in range(60):
+            for _ in range(36):
                 if centers:
-                    if random.random() < max(0.55, args.overlap_prob):
+                    if ref_instance is not None and float(variant.get('elongation', 1.0)) >= 1.45:
+                        pos = _sample_side_by_side_position(
+                            w, h, ow, oh, poly_ctx, ref_instance, min_inside_ratio=min_inside_ratio
+                        )
+                        if pos is None:
+                            continue
+                        px, py = pos
+                    elif random.random() < max(0.55, args.overlap_prob):
                         pos = _sample_heap_position(
-                            w, h, ow, oh, poly_px, centers, heap_anchor, visible_masks,
-                            args.cluster_distance_factor, args.overlap_spread
+                            w, h, ow, oh, poly_ctx, centers, heap_anchor, visible_masks,
+                            args.cluster_distance_factor, args.overlap_spread, min_inside_ratio=min_inside_ratio
                         )
                         if pos is None:
                             continue
                         px, py = pos
                     else:
-                        pos = sample_scattered_position(w, h, ow, oh, poly_px, centers, tries=40)
+                        pos = sample_scattered_position(
+                            w, h, ow, oh, poly_ctx, centers, tries=24, min_inside_ratio=min_inside_ratio
+                        )
                         if pos is None:
                             continue
                         px, py = pos
                 else:
-                    pos = sample_position_in_polygon(w, h, ow, oh, poly_px, tries=40)
+                    pos = sample_position_in_polygon(
+                        w, h, ow, oh, poly_ctx, tries=24, min_inside_ratio=min_inside_ratio
+                    )
                     if pos is None:
                         continue
                     px, py = pos
 
-                if poly_px is not None and not bbox_fully_inside_poly(px, py, ow, oh, poly_px):
+                if rect_inside_poly_ratio(px, py, ow, oh, poly_ctx) < min_inside_ratio:
                     continue
 
                 overlap_ok = True
@@ -879,8 +1098,17 @@ def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side
             visible_areas.append(int((new_mask > 0).sum()))
 
             ys2, xs2 = np.where(new_mask > 0)
-            centers.append((int(xs2.mean()), int(ys2.mean())))
-            placed_instances.append({'mask': new_mask, 'source': cutout['source']})
+            center = (int(xs2.mean()), int(ys2.mean()))
+            centers.append(center)
+            placed_instances.append({
+                'mask': new_mask,
+                'source': cutout['source'],
+                'center': center,
+                'ow': ow,
+                'oh': oh,
+                'long_axis': np.array(variant.get('long_axis', [1.0, 0.0]), dtype=np.float32),
+                'elongation': float(variant.get('elongation', 1.0)),
+            })
 
         if len(visible_masks) < args.min_objects:
             continue
@@ -910,6 +1138,7 @@ def build_multi_scene(args, bg_files, profile_data, cutouts, reference_long_side
 
 
 def build_single_scene(args, bg_files, profile_data, cutouts, reference_long_side):
+    min_inside_ratio = 0.85
     for _ in range(200):
         bg, bg_path = pick_random_background(bg_files)
         if bg is None:
@@ -921,8 +1150,10 @@ def build_single_scene(args, bg_files, profile_data, cutouts, reference_long_sid
         h, w = bg.shape[:2]
         effective = choose_effective_settings(entry, args.class_name)
         poly_px = None
+        poly_ctx = None
         if effective['poly'] is not None:
             poly_px = [(int(pt[0] * w), int(pt[1] * h)) for pt in effective['poly']]
+            poly_ctx = build_poly_context(w, h, poly_px)
 
         requested_scale = choose_requested_scale(getattr(args, 'preview_mode', 'random'), effective)
         bg_beta = choose_background_beta(getattr(args, 'preview_mode', 'random'), effective)
@@ -944,12 +1175,9 @@ def build_single_scene(args, bg_files, profile_data, cutouts, reference_long_sid
 
         px = None
         py = None
-        for _ in range(60):
-            tx = random.randint(0, w - ow)
-            ty = random.randint(0, h - oh)
-            if poly_px is None or bbox_fully_inside_poly(tx, ty, ow, oh, poly_px):
-                px, py = tx, ty
-                break
+        pos = sample_position_in_polygon(w, h, ow, oh, poly_ctx, tries=28, min_inside_ratio=min_inside_ratio)
+        if pos is not None:
+            px, py = pos
         if px is None or py is None:
             continue
 

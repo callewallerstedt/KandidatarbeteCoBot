@@ -145,7 +145,7 @@ def _worker_init(config):
     args = SimpleNamespace(**config['args'])
     data_root = Path(config['data_root'])
     profile_data = core_load_profile(Path(config['placement_profile']))
-    cutouts = core_collect_cutouts(data_root, args.class_name)
+    cutouts = core_collect_cutouts(data_root, args.class_name, getattr(args, 'source_run_filter', ''))
     _WORKER_STATE['build_multi_scene'] = core_build_multi_scene
     _WORKER_STATE['args'] = args
     _WORKER_STATE['bg_files'] = [Path(p) for p in config['bg_files']]
@@ -200,6 +200,7 @@ def main():
     ap.add_argument('--object-shade-prob', type=float, default=0.45, help='Probability of partial one-sided shading per object')
     ap.add_argument('--object-shade-strength', type=float, default=0.22, help='Strength of partial object shading')
     ap.add_argument('--workers', type=int, default=1, help='Parallel workers for generation only; preview stays single-process')
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     ap.add_argument('--run-name', default='')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
@@ -231,7 +232,7 @@ def main():
     if not args.placement_profile.strip():
         raise RuntimeError('placement_profile is required for multi-instance generation')
     profile_data = core_load_profile(Path(args.placement_profile))
-    cutouts = core_collect_cutouts(root, args.class_name)
+    cutouts = core_collect_cutouts(root, args.class_name, args.source_run_filter)
     reference_long_side = float(cutouts[0]['long_side'])
 
     preview_frames = []

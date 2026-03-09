@@ -51,6 +51,7 @@ def main():
     ap.add_argument('--object-temp-variance', type=float, default=0.18)
     ap.add_argument('--object-shade-prob', type=float, default=0.45)
     ap.add_argument('--object-shade-strength', type=float, default=0.22)
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     ap.add_argument('--run-name', default='')
     ap.add_argument('--seed', type=int, default=42)
     args = ap.parse_args()
@@ -65,7 +66,7 @@ def main():
         raise RuntimeError(f'No background images found in {bg_dir}')
 
     profile_data = load_profile(Path(args.placement_profile))
-    cutouts = collect_cutouts(Path(args.data_root), args.class_name)
+    cutouts = collect_cutouts(Path(args.data_root), args.class_name, args.source_run_filter)
     reference_long_side = float(cutouts[0]['long_side'])
 
     run_name = args.run_name.strip() or datetime.now().strftime('preview_%Y%m%d_%H%M%S')

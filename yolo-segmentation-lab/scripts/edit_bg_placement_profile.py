@@ -250,6 +250,9 @@ def set_effective_brightness(item, class_name: str, bg_min: float, bg_max: float
 
 
 def extract_object_sample(data_root: Path, class_name: str):
+    from profile_scene_builders import load_saved_or_polygon_mask as core_load_saved_or_polygon_mask
+    from profile_scene_builders import despill_magenta_pixels as core_despill_magenta_pixels
+
     img_root = data_root / 'images' / class_name
     lbl_root = data_root / 'labels' / class_name
     if not img_root.exists() or not lbl_root.exists():
@@ -266,15 +269,17 @@ def extract_object_sample(data_root: Path, class_name: str):
         if src is None:
             continue
         h, w = src.shape[:2]
-        poly = parse_yolo_polygon(lb, w, h)
-        if poly is None or len(poly) < 3:
+        mask = core_load_saved_or_polygon_mask(data_root, class_name, im, lb, w, h)
+        if mask is None:
             continue
-        mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.fillPoly(mask, [poly.reshape(-1, 1, 2)], 255)
-        x, y, ww, hh = cv2.boundingRect(poly.reshape(-1, 1, 2))
+        ys, xs = np.where(mask > 0)
+        if len(xs) < 30:
+            continue
+        x, y, ww, hh = cv2.boundingRect(np.column_stack((xs, ys)).astype(np.int32))
         crop = src[y:y+hh, x:x+ww].copy()
         m = mask[y:y+hh, x:x+ww].copy()
         if crop.size > 0 and (m > 0).sum() > 30:
+            crop = core_despill_magenta_pixels(crop, m, strength=0.72)
             return crop, m
     return None
 

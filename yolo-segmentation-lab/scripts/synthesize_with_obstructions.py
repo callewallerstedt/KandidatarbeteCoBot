@@ -123,6 +123,7 @@ def pick_boundary_point(obj_mask, center, d_unit):
 
 def main():
     from profile_scene_builders import next_output_index as core_next_output_index
+    from profile_scene_builders import source_rel_matches_run_filter as core_source_rel_matches_run_filter
 
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
@@ -143,6 +144,7 @@ def main():
     ap.add_argument('--obstruction-scale-max', type=float, default=None, help='Max obstruction scale')
     ap.add_argument('--object-scale-min', type=float, default=0.85, help='Min scale for base object placement on random background')
     ap.add_argument('--object-scale-max', type=float, default=1.15, help='Max scale for base object placement on random background')
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     ap.add_argument('--preview-only', action='store_true')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-count', type=int, default=12)
@@ -174,17 +176,22 @@ def main():
         raise RuntimeError('No background images found')
 
     pairs = []
-    for im in sorted(src_img_dir.glob('*')):
+    for im in sorted(src_img_dir.rglob('*')):
         if im.suffix.lower() not in IMG_EXTS:
+            continue
+        rel = im.relative_to(src_img_dir)
+        if not core_source_rel_matches_run_filter(rel, args.source_run_filter):
             continue
         stem = im.stem
         # only original white-table seeds
         if any(tag in stem for tag in ['_manual_', '_synth_', '_obs_']):
             continue
-        lb = src_lbl_dir / f'{stem}.txt'
+        lb = (src_lbl_dir / rel).with_suffix('.txt')
         if lb.exists():
             pairs.append((im, lb))
     if not pairs:
+        if args.source_run_filter:
+            raise RuntimeError(f'No source base image-label pairs found with source_run_filter={args.source_run_filter!r}')
         raise RuntimeError('No source base image-label pairs found')
 
     preview_frames = []

@@ -411,6 +411,7 @@ def main():
     ap.add_argument('--object-shade-prob', type=float, default=0.45)
     ap.add_argument('--object-shade-strength', type=float, default=0.22)
     ap.add_argument('--max-rotation', type=float, default=360.0)
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     ap.add_argument('--preview-window', action='store_true')
     ap.add_argument('--preview-max-width', type=int, default=1600)
     ap.add_argument('--preview-max-height', type=int, default=900)
@@ -427,7 +428,7 @@ def main():
         raise RuntimeError(f'No background images found in {bg_dir}')
 
     profile_data = core_load_profile(Path(args.placement_profile))
-    cutouts = core_collect_cutouts(Path(args.data_root), args.class_name)
+    cutouts = core_collect_cutouts(Path(args.data_root), args.class_name, args.source_run_filter)
     reference_long_side = cutouts[0]['long_side']
 
     run_name = args.run_name.strip() or datetime.now().strftime('preview_%Y%m%d_%H%M%S')

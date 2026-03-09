@@ -70,10 +70,11 @@ def main():
     ap.add_argument('--cool-bias', type=float, required=True)
     ap.add_argument('--warm-bias', type=float, required=True)
     ap.add_argument('--sample-count', type=int, default=4)
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     args = ap.parse_args()
 
     random.seed()
-    cutouts = collect_cutouts(Path(args.data_root), args.class_name)
+    cutouts = collect_cutouts(Path(args.data_root), args.class_name, args.source_run_filter)
     app = TempPreviewApp(args.class_name, cutouts, args.cool_bias, args.warm_bias, args.sample_count)
     app.mainloop()
 

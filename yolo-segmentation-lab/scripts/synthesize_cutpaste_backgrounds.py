@@ -158,20 +158,27 @@ def profile_for_bg(args, bg_path):
     return None
 
 
-def extract_crop_from_pair(im_path: Path, lb_path: Path):
+def extract_crop_from_pair(im_path: Path, lb_path: Path, data_root: Path, class_name: str):
+    from profile_scene_builders import load_saved_or_polygon_mask as core_load_saved_or_polygon_mask
+    from profile_scene_builders import despill_magenta_pixels as core_despill_magenta_pixels
+
     src = cv2.imread(str(im_path))
     if src is None:
         return None
     src_h, src_w = src.shape[:2]
     cls_id, poly = load_yolo_polygon(lb_path, src_w, src_h)
-    if poly is None:
+    mask = core_load_saved_or_polygon_mask(data_root, class_name, im_path, lb_path, src_w, src_h)
+    if mask is None:
         return None
-    mask = poly_to_mask(poly, src_w, src_h)
-    x, y, bw, bh = cv2.boundingRect(poly.astype(np.int32))
+    ys, xs = np.where(mask > 0)
+    if len(xs) < 20:
+        return None
+    x, y, bw, bh = cv2.boundingRect(np.column_stack((xs, ys)).astype(np.int32))
     crop = src[y:y + bh, x:x + bw]
     crop_mask = mask[y:y + bh, x:x + bw]
     if crop.size == 0 or crop_mask.size == 0:
         return None
+    crop = core_despill_magenta_pixels(crop, crop_mask, strength=0.72)
     return cls_id, crop, crop_mask
 
 
@@ -180,7 +187,7 @@ def compose_once(pairs, bg_files, args, fixed_scale=None, fixed_bg_beta=None, fi
         im_path, lb_path = args.preview_pair
     else:
         im_path, lb_path = random.choice(pairs)
-    crop_info = extract_crop_from_pair(im_path, lb_path)
+    crop_info = extract_crop_from_pair(im_path, lb_path, Path(args.data_root), args.class_name)
     if crop_info is None:
         return None
     cls_id, crop, crop_mask = crop_info
@@ -326,6 +333,7 @@ def main():
     from profile_scene_builders import collect_cutouts as core_collect_cutouts
     from profile_scene_builders import load_profile as core_load_profile
     from profile_scene_builders import next_output_index as core_next_output_index
+    from profile_scene_builders import source_rel_matches_run_filter as core_source_rel_matches_run_filter
 
     ap = argparse.ArgumentParser()
     ap.add_argument('--class-name', required=True)
@@ -344,6 +352,7 @@ def main():
     ap.add_argument('--object-temp-variance', type=float, default=0.18, help='Random object temperature variance around the bias')
     ap.add_argument('--object-shade-prob', type=float, default=0.45, help='Probability of partial one-sided shading per object')
     ap.add_argument('--object-shade-strength', type=float, default=0.22, help='Strength of partial object shading')
+    ap.add_argument('--source-run-filter', default='', help='Optional comma-separated filter for real source run folder names used to build cutouts')
     ap.add_argument('--run-name', default='', help='Synthetic run folder name (default timestamp)')
     ap.add_argument('--preview-only', action='store_true', help='Show/save preview only, do not write training data')
     ap.add_argument('--preview-window', action='store_true', help='Show preview window')
@@ -391,21 +400,26 @@ def main():
     for im in sorted(src_img_dir.rglob('*')):
         if im.suffix.lower() not in IMG_EXTS:
             continue
-        rel_parts = set(im.relative_to(src_img_dir).parts)
+        rel = im.relative_to(src_img_dir)
+        rel_parts = set(rel.parts)
         if 'synth_runs' in rel_parts or 'obs_runs' in rel_parts:
+            continue
+        if not core_source_rel_matches_run_filter(rel, args.source_run_filter):
             continue
         if any(tag in im.stem for tag in ['_synth_', '_obs_']):
             continue
-        lb = (src_lbl_dir / im.relative_to(src_img_dir)).with_suffix('.txt')
+        lb = (src_lbl_dir / rel).with_suffix('.txt')
         if lb.exists():
             pairs.append((im, lb))
     if not pairs:
+        if args.source_run_filter:
+            raise RuntimeError(f'No source image-label pairs found for class={args.class_name} with source_run_filter={args.source_run_filter!r}')
         raise RuntimeError(f'No source image-label pairs found for class={args.class_name}')
 
     args.reference_long_side = None
     args.preview_pair = None
     for im, lb in pairs:
-        crop_info = extract_crop_from_pair(im, lb)
+        crop_info = extract_crop_from_pair(im, lb, root, args.class_name)
         if crop_info is None:
             continue
         _, crop, _ = crop_info
